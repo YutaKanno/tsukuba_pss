@@ -1,7 +1,10 @@
-matplotlib==3.10.3
-numpy==2.2.5
-pandas==2.2.3
-Pillow==10.0.0
-plotly==5.24.1
-streamlit==1.39.0
-streamlit_drawable_canvas==0.9.3
+streamlit>=1.30.0
+pandas>=1.5.3
+numpy>=1.23.0
+matplotlib>=3.7.0
+plotly>=5.16.0
+Pillow>=9.5.0
+streamlit-drawable-canvas>=0.8.0
+streamlit-image-coordinates>=0.1.2
+requests>=2.31.0
+beautifulsoup4>=4.12.0
