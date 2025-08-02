@@ -1455,9 +1455,6 @@ def main_page(list):
 
     if st.sidebar.button('選手交代'):
         st.session_state.page_ctg = 'member'
-    if st.sidebar.button('データ保存'):
-        dataframe.to_csv('game_data.csv', index=False, encoding='cp932')
-        st.sidebar.success('保存完了')
         
     csv_bytes = dataframe.to_csv(index=False, encoding='cp932').encode('cp932')
     csv_buffer = io.BytesIO(csv_bytes)
@@ -1567,5 +1564,6 @@ def main_page(list):
             st.sidebar.warning('まだプレイが入力されていません')
 
         
+
 
     return st.session_state['data_list']
