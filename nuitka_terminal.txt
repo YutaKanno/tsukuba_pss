@@ -1,0 +1,22 @@
+python -m nuitka `
+--standalone `
+--onefile `
+--windows-icon-from-ico="C:/Users/Yuta/Desktop/PyFile2024/stm_tsukubax/icon.ico" `
+--enable-plugin=tk-inter `
+--include-data-files=C:/Users/Yuta/Desktop/PyFile2024/stm_tsukubax/main.py=main.py `
+--include-data-files=C:/Users/Yuta/Desktop/PyFile2024/stm_tsukubax/main_page.py=main_page.py `
+--include-data-files=C:/Users/Yuta/Desktop/PyFile2024/stm_tsukubax/member.py=member.py `
+--include-data-files=C:/Users/Yuta/Desktop/PyFile2024/stm_tsukubax/plate.py=plate.py `
+--include-data-files=C:/Users/Yuta/Desktop/PyFile2024/stm_tsukubax/field.py=field.py `
+--include-data-files=C:/Users/Yuta/Desktop/PyFile2024/stm_tsukubax/cal_stats.py=cal_stats.py `
+--include-data-files=C:/Users/Yuta/Desktop/PyFile2024/stm_tsukubax/member_requests.py=member_requests.py `
+--include-data-files=C:/Users/Yuta/Desktop/PyFile2024/stm_tsukubax/game_data.csv=game_data.csv `
+--include-data-files=C:/Users/Yuta/Desktop/PyFile2024/stm_tsukubax/ƒƒ“ƒo[“o˜^—p.csv=ƒƒ“ƒo[“o˜^—p.csv `
+--include-data-files=C:/Users/Yuta/Desktop/PyFile2024/stm_tsukubax/member_remember.csv=member_remember.csv `
+--include-data-files=C:/Users/Yuta/Desktop/PyFile2024/stm_tsukubax/Field3.png=Field3.png `
+--include-data-files=C:/Users/Yuta/Desktop/PyFile2024/stm_tsukubax/Plate_L.png=Plate_L.png `
+--include-data-files=C:/Users/Yuta/Desktop/PyFile2024/stm_tsukubax/Plate_R.png=Plate_R.png `
+--include-data-files=C:/Users/Yuta/Desktop/PyFile2024/stm_tsukubax/ipaexg.ttf=ipaexg.ttf `
+--include-data-files=C:/Users/Yuta/Desktop/PyFile2024/stm_tsukubax/ipaexm.ttf=ipaexm.ttf `
+--output-dir=tsukubax `
+tsukubax.py
