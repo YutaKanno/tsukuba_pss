@@ -55,10 +55,10 @@ uploaded_member_data_file = None
 # --- File Uploads (Conditional Display) ---
 # メインページ以外でのみファイルアップローダーを表示
 if st.session_state.get('page_ctg', 'start') != 'main':
-    st.sidebar.header("ファイルアップロード")
+    st.header("ファイルアップロード")
 
-    uploaded_game_data_file = st.sidebar.file_uploader("試合データファイル (game_data.csv) をアップロード", type=["csv"])
-    uploaded_member_data_file = st.sidebar.file_uploader("メンバーデータファイル (メンバー登録用.csv) をアップロード", type=["csv"])
+    uploaded_game_data_file = st.file_uploader("試合データファイル (game_data.csv) をアップロード", type=["csv"])
+    uploaded_member_data_file = st.file_uploader("メンバーデータファイル (メンバー登録用.csv) をアップロード", type=["csv"])
 
 # --- Session State Initialization and Data Loading ---
 if 'all_list' not in st.session_state:
@@ -215,4 +215,5 @@ elif st.session_state.page_ctg == 'main':
     st.session_state.game_start = 'continue'
     st.session_state.temp_list = main_page.main_page(
         st.session_state.get("temp_list")
+
         )
