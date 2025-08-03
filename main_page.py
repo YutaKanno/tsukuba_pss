@@ -1288,8 +1288,6 @@ def main_page(list):
                                 st.warning('捕球選手が未入力')
                             elif (result_ctg not in ['continue', 'K', 'BB'] or 打撃結果 == 'ファール') and (打球タイプ in ['0', 0]) and プレイの種類 == '投球':
                                 st.warning('打球タイプが未入力')
-                            elif 開始時刻 in [0, '']:
-                                st.warning('試合開始ボタンが押されていません')
                             else:
                         
                                 inputed_list = [
