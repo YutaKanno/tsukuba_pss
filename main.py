@@ -55,10 +55,10 @@ uploaded_member_data_file = None
 # --- File Uploads (Conditional Display) ---
 # メインページ以外でのみファイルアップローダーを表示
 if st.session_state.get('page_ctg', 'start') != 'main':
-    st.sidebar.header("ファイルアップロード")
+    st.header("ファイルアップロード")
 
-    uploaded_game_data_file = st.sidebar.file_uploader("試合データファイル (game_data.csv) をアップロード", type=["csv"])
-    uploaded_member_data_file = st.sidebar.file_uploader("メンバーデータファイル (メンバー登録用.csv) をアップロード", type=["csv"])
+    uploaded_game_data_file = st.file_uploader("試合データファイル (game_data.csv) をアップロード", type=["csv"])
+    uploaded_member_data_file = st.file_uploader("メンバーデータファイル (メンバー登録用.csv) をアップロード", type=["csv"])
 
 # --- Session State Initialization and Data Loading ---
 if 'all_list' not in st.session_state:
@@ -73,21 +73,21 @@ if uploaded_game_data_file is not None:
         df = pd.read_csv(uploaded_game_data_file, encoding='cp932')
         df = df.applymap(safe_eval)
         st.session_state['all_list'] = df.values.tolist()
-        st.sidebar.success("試合データが正常にロードされました。")
+        st.success("試合データが正常にロードされました。")
     except Exception as e:
-        st.sidebar.error(f"試合データの読み込み中にエラーが発生しました: {e}")
+        st.error(f"試合データの読み込み中にエラーが発生しました: {e}")
 elif not st.session_state['all_list'] and st.session_state.get('page_ctg', 'start') != 'main': # Only show info if no data is loaded yet and not on main page
-    st.sidebar.info("試合データをアップロードしてください。")
+    st.info("試合データをアップロードしてください。")
 
 # Load member_df from upload or provide a placeholder
 if uploaded_member_data_file is not None:
     try:
         st.session_state['member_df'] = pd.read_csv(uploaded_member_data_file, encoding='utf-8')
-        st.sidebar.success("メンバーデータが正常にロードされました。")
+        st.success("メンバーデータが正常にロードされました。")
     except Exception as e:
-        st.sidebar.error(f"メンバーデータの読み込み中にエラーが発生しました: {e}")
+        st.error(f"メンバーデータの読み込み中にエラーが発生しました: {e}")
 elif st.session_state['member_df'] is None and st.session_state.get('page_ctg', 'start') != 'main':
-    st.sidebar.info("メンバーデータをアップロードしてください。")
+    st.info("メンバーデータをアップロードしてください。")
 
 # Ensure member_df is available before proceeding
 member_df = st.session_state['member_df']
@@ -154,13 +154,7 @@ elif st.session_state.page_ctg == 'member':
         st.rerun()
     # Check for member_remember.csv if starting a new game
     mr = None
-    if st.session_state.game_start == 'start':
-        try:
-            mr = pd.read_csv('member_remember.csv', encoding='cp932')
-            mr = mr.applymap(safe_eval)
-        except FileNotFoundError:
-            st.warning("`member_remember.csv` が見つかりませんでした。新しいメンバー情報で開始します。")
-            mr = pd.DataFrame() # Create an empty DataFrame if not found
+    
 
     initial_top_poses = ['', '', '', '', '', '', '', '', '', 'P']
     initial_top_names = ["先攻1", "先攻2", "先攻3", "先攻4", "先攻5", "先攻6", "先攻7", "先攻8", "先攻9", "先攻P", "先攻C", "先攻1B", "先攻2B", "先攻3B", "先攻SS", "先攻LF", "先攻CF", "先攻RF", "先攻", "先攻"]
