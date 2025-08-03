@@ -45,7 +45,7 @@ hide_all_style = """
     </style>
 """
 st.markdown(hide_all_style, unsafe_allow_html=True)
-
+st.header('Input GameData App')
 # --- 変数の初期化 ---
 # アップロードされたファイル変数を事前にNoneで初期化
 uploaded_game_data_file = None
@@ -55,10 +55,10 @@ uploaded_member_data_file = None
 # --- File Uploads (Conditional Display) ---
 # メインページ以外でのみファイルアップローダーを表示
 if st.session_state.get('page_ctg', 'start') != 'main':
-    st.header("ファイルアップロード")
+    st.sidebar.header("ファイルアップロード")
 
-    uploaded_game_data_file = st.file_uploader("試合データファイル (game_data.csv) をアップロード", type=["csv"])
-    uploaded_member_data_file = st.file_uploader("メンバーデータファイル (メンバー登録用.csv) をアップロード", type=["csv"])
+    uploaded_game_data_file = st.sidebar.file_uploader("試合データファイル (game_data.csv) をアップロード", type=["csv"])
+    uploaded_member_data_file = st.sidebar.file_uploader("メンバーデータファイル (メンバー登録用.csv) をアップロード", type=["csv"])
 
 # --- Session State Initialization and Data Loading ---
 if 'all_list' not in st.session_state:
@@ -130,7 +130,7 @@ if st.session_state.page_ctg == 'start':
 
     # ボタンを横並びで表示
     st.markdown('<div class="button-container">', unsafe_allow_html=True)
-    st.header('Input GameData App')
+    
     st.write('---')
     col1, col2, col0 = st.columns([1, 1, 4])
     with col1:
@@ -215,5 +215,4 @@ elif st.session_state.page_ctg == 'main':
     st.session_state.game_start = 'continue'
     st.session_state.temp_list = main_page.main_page(
         st.session_state.get("temp_list")
-
         )
