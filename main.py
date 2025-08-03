@@ -45,7 +45,7 @@ hide_all_style = """
     </style>
 """
 st.markdown(hide_all_style, unsafe_allow_html=True)
-st.header('Input GameData App')
+
 # --- 変数の初期化 ---
 # アップロードされたファイル変数を事前にNoneで初期化
 uploaded_game_data_file = None
@@ -209,4 +209,5 @@ elif st.session_state.page_ctg == 'main':
     st.session_state.game_start = 'continue'
     st.session_state.temp_list = main_page.main_page(
         st.session_state.get("temp_list")
+
         )
