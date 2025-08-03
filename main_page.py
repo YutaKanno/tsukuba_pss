@@ -1271,6 +1271,8 @@ def main_page(list):
                         """
                         st.markdown(button_css, unsafe_allow_html=True)
                         if st.button('.　　　確定　　　.', key='confirm_button'):
+                            if 開始時刻 in [0, '']:
+                                st.warning('試合開始ボタンが押されていません')
                             if 打撃結果 == 'エラー' and エラー選手 == 0 and プレイの種類 == '投球':
                                 st.warning('エラー選手が未入力')
                             if 構え in ['0', 0] and プレイの種類 == '投球':
@@ -1311,7 +1313,7 @@ def main_page(list):
                                 dataframe = pd.DataFrame(st.session_state['all_list'], columns=column_names)
                                 
                                 st.session_state['現在時刻'] = datetime.now().strftime('%H:%M:%S')
-                                if 開始時刻 == '':
+                                if 開始時刻 in ['', 0]:
                                     st.session_state['経過時間'] = '0:00'
                                 else:
                                     st.session_state['経過時間'] = datetime.strptime(st.session_state['現在時刻'], '%H:%M:%S') - datetime.strptime(st.session_state['開始時刻'], '%H:%M:%S')
