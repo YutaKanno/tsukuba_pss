@@ -1271,8 +1271,7 @@ def main_page(list):
                         """
                         st.markdown(button_css, unsafe_allow_html=True)
                         if st.button('.　　　確定　　　.', key='confirm_button'):
-                            if 開始時刻 in [0, '']:
-                                st.warning('試合開始ボタンが押されていません')
+                            
                             if 打撃結果 == 'エラー' and エラー選手 == 0 and プレイの種類 == '投球':
                                 st.warning('エラー選手が未入力')
                             if 構え in ['0', 0] and プレイの種類 == '投球':
@@ -1289,6 +1288,8 @@ def main_page(list):
                                 st.warning('捕球選手が未入力')
                             elif (result_ctg not in ['continue', 'K', 'BB'] or 打撃結果 == 'ファール') and (打球タイプ in ['0', 0]) and プレイの種類 == '投球':
                                 st.warning('打球タイプが未入力')
+                            elif 開始時刻 in [0, '']:
+                                st.warning('試合開始ボタンが押されていません')
                             else:
                         
                                 inputed_list = [
