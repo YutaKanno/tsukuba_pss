@@ -25,8 +25,8 @@ def safe_eval(val):
 
 # --- Streamlit Page Configuration ---
 st.set_page_config(
-    page_title="My Streamlit App",
-    page_icon="📈",
+    page_title="Tsukuba PSS",
+    page_icon="icon.ico",
     layout="wide",  # ウィンドウサイズに合わせて広く表示
 )
 
@@ -211,3 +211,4 @@ elif st.session_state.page_ctg == 'main':
         st.session_state.get("temp_list")
 
         )
+
