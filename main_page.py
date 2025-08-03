@@ -1376,6 +1376,7 @@ def main_page(list):
         
     with tab2:
         st.write('## 試合開始')
+        st.success(f"試合開始: {st.session_state['開始時刻']}")
         if st.button('試合開始'):
             st.session_state['開始時刻'] = datetime.now().strftime('%H:%M:%S')
             st.success(f"試合開始: {st.session_state['開始時刻']}")
