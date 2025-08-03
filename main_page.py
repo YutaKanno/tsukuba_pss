@@ -456,7 +456,7 @@ def main_page(list):
     
     
     
-    tab1, tab2 = st.tabs(['データ入力', 'その他'])
+    tab2, tab1 = st.tabs(['メニュー', 'データ入力'])
     with tab1:
         container = st.container()
         with container:
@@ -1312,7 +1312,8 @@ def main_page(list):
                                 dataframe = pd.DataFrame(st.session_state['all_list'], columns=column_names)
                                 
                                 st.session_state['現在時刻'] = datetime.now().strftime('%H:%M:%S')
-                                if 開始時刻 in ['', 0]:
+                                print(開始時刻)
+                                if 開始時刻 in ['']:
                                     st.session_state['経過時間'] = '0:00'
                                 else:
                                     st.session_state['経過時間'] = datetime.strptime(st.session_state['現在時刻'], '%H:%M:%S') - datetime.strptime(st.session_state['開始時刻'], '%H:%M:%S')
