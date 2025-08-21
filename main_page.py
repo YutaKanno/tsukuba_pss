@@ -456,7 +456,10 @@ def main_page(list):
     
     
     
-    tab2, tab1 = st.tabs(['メニュー', 'データ入力'])
+    tab2, tab1, tab3 = st.tabs(['メニュー', 'データ入力', 'データ'])
+    with tab3:
+        st.dataframe(dataframe)
+        
     with tab1:
         container = st.container()
         with container:
@@ -1568,5 +1571,6 @@ def main_page(list):
                 st.warning('まだプレイが入力されていません')
 
             
+
 
         return st.session_state['data_list']
