@@ -1464,7 +1464,12 @@ def main_page(list):
         if st.button('選手交代'):
             st.session_state.page_ctg = 'member'
             
-        csv_bytes = dataframe.to_csv(index=False, encoding='cp932').encode('cp932')
+        csv_str = dataframe.to_csv(index=False)
+        
+        # バイト列に変換（UTF-8ならそのままOK、Shift-JISで保存したいならencode指定）
+        csv_bytes = csv_str.encode('cp932')
+        
+        # バッファに乗せる
         csv_buffer = io.BytesIO(csv_bytes)
 
         # ダウンロードボタン（バイナリデータ使用）
@@ -1575,5 +1580,6 @@ def main_page(list):
 
 
         return st.session_state['data_list']
+
 
 
