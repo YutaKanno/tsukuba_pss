@@ -458,7 +458,8 @@ def main_page(list):
     
     tab2, tab1, tab3 = st.tabs(['メニュー', 'データ入力', 'データ一覧'])
     with tab3:
-        st.dataframe(dataframe)
+        st.dataframe(dataframe.astype(str))
+
         
     with tab1:
         container = st.container()
@@ -1574,4 +1575,5 @@ def main_page(list):
 
 
         return st.session_state['data_list']
+
 
