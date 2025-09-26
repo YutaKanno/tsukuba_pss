@@ -8,7 +8,6 @@ import field
 import cal_stats
 from datetime import datetime
 import io
-import warnings
 
 def update_list(list, top_poses, top_names, top_nums, top_lrs, bottom_poses, bottom_names, bottom_nums, bottom_lrs, top_score, bottom_score):
 
@@ -469,7 +468,6 @@ def main_page(list):
             with col1:
                 col31, col32 = st.columns([1,5])
                 with col31:
-                    warnings.filterwarnings("ignore")
                     # 球種の出現数を取得
                     labels, values = cal_stats.pt_pct(投手氏名, dataframe)
 
@@ -1588,6 +1586,7 @@ def main_page(list):
 
 
         return st.session_state['data_list']
+
 
 
 
