@@ -512,7 +512,13 @@ def main_page(list):
                     )
 
                     # Streamlitで表示
-                    st.plotly_chart(fig, height=10, width=10)
+                    # Streamlitで表示
+                    st.plotly_chart(
+                        fig,
+                        config={"displayModeBar": False},  # 表示設定（例: ツールバー非表示）
+                        use_container_width=False
+                    )
+
 
 
                 with col32:
@@ -1580,6 +1586,7 @@ def main_page(list):
 
 
         return st.session_state['data_list']
+
 
 
 
