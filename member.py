@@ -153,8 +153,28 @@ def member_page(member_df, top_poses, top_names, top_nums, top_lrs, bottom_poses
 
         with col14:
             for i in range(10):
-                key_name = f'{st.session_state.top_team}_{top_nums[i]}_{i}'
-                top_names[i] = st.text_input('', label_visibility='collapsed', key=key_name, value=top_names[i])
+                # ユニーク key（チーム名＋背番号＋インデックス）
+                key_name = f"top_{st.session_state.top_team}_{top_nums[i]}_{i}"
+                
+                # session_state に存在しなければ初期化
+                if key_name not in st.session_state:
+                    st.session_state[key_name] = top_names[i]
+
+                # 背番号から名前を取得して更新
+                num = str(top_nums[i])
+                matched = top_list[top_list['背番号'] == num]
+                if not matched.empty:
+                    st.session_state[key_name] = matched.iloc[0]['名前']
+                    top_lrs[i] = matched.iloc[0]['左右']
+                else:
+                    st.session_state[key_name] = ''
+                    top_lrs[i] = ''
+
+                # text_input には value を渡さず key だけ
+                st.text_input('', label_visibility='collapsed', key=key_name)
+                
+                # 表示用の top_names に反映（必要なら）
+                top_names[i] = st.session_state[key_name]
 
         # top_posesが2の名前を10番目に追加
         for i in range(9): # top_posesのi番目のポジションを検索
@@ -208,19 +228,37 @@ def member_page(member_df, top_poses, top_names, top_nums, top_lrs, bottom_poses
                         bottom_names[i] = matched2.iloc[0]['名前']
                         bottom_lrs[i] = matched2.iloc[0]['左右']
                     else:
-                        st.write('一致するメンバーがいません')
                         bottom_names[i] = ''
                         bottom_lrs[i] = ''
 
                 except ValueError:
-                    st.write('フィルタをかける段階でエラーが出ました')
                     bottom_names[i] = ''
                     bottom_lrs[i] = ''
 
         with col23:
             for i in range(10):
-                key_name2 = f'{st.session_state.bottom_team}_{bottom_nums[i]}_{i}'
-                bottom_names[i] = st.text_input('', label_visibility='collapsed', key=key_name2, value=bottom_names[i])
+                # ユニーク key（チーム名＋背番号＋インデックス）
+                key_name2 = f"bottom_{st.session_state.bottom_team}_{bottom_nums[i]}_{i}"
+                
+                # session_state に存在しなければ初期化
+                if key_name2 not in st.session_state:
+                    st.session_state[key_name2] = bottom_names[i]
+
+                # 背番号から名前を取得して更新
+                num = str(bottom_nums[i])
+                matched = bottom_list[bottom_list['背番号'] == num]
+                if not matched.empty:
+                    st.session_state[key_name2] = matched.iloc[0]['名前']
+                    bottom_lrs[i] = matched.iloc[0]['左右']
+                else:
+                    st.session_state[key_name2] = ''
+                    bottom_lrs[i] = ''
+
+                # text_input には value を渡さず key だけ
+                st.text_input('', label_visibility='collapsed', key=key_name2)
+                
+                # 表示用の top_names に反映（必要なら）
+                bottom_names[i] = st.session_state[key_name2]
 
         # bottom_posesが2の名前を10番目に追加
         for i in range(9): # top_posesのi番目のポジションを検索
