@@ -141,23 +141,20 @@ def member_page(member_df, top_poses, top_names, top_nums, top_lrs, bottom_poses
                 try:
                     num = str(top_nums[i])
                     matched = top_list[top_list['背番号'] == num]
-                    st.write(top_list['背番号'])
-                    st.write(num)
                     if not matched.empty:
                         top_names[i] = matched.iloc[0]['名前']
                         top_lrs[i] = matched.iloc[0]['左右']
                     else:
-                        st.write('一致するメンバーがいません')
                         top_names[i] = ''
                         top_lrs[i] = ''
                 except ValueError:
-                    st.write('フィルタをかける段階でエラーが出ました')
                     top_names[i] = ''
                     top_lrs[i] = ''
 
         with col14:
             for i in range(10):
-                top_names[i] = st.text_input('', label_visibility='collapsed', key=f'top_name_{i}', value=top_names[i])
+                key_name = f'top_name_{st.session_state.top_team}_{i}'
+                top_names[i] = st.text_input('', label_visibility='collapsed', key=key_name, value=top_names[i])
 
         # top_posesが2の名前を10番目に追加
         for i in range(9): # top_posesのi番目のポジションを検索
