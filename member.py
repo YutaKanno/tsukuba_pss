@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import sqlite3
 import json
+# import member_requests # このモジュールが利用可能で、そのまま動作することを前提としています。
 
 # データベースファイル名
 DB_FILE = 'member_data.db'
@@ -66,8 +67,10 @@ def get_all_universities():
     conn.close()
     return universities
 
-def member_page(member_df, top_poses, top_names, top_nums, top_lrs, bottom_poses, bottom_names, bottom_nums, bottom_lrs, 先攻チーム, 後攻チーム, 表裏): 
-    init_db()  # ページ関数の開始時にデータベースを初期化します。
+
+def member_page(member_df, top_poses, top_names, top_nums, top_lrs, bottom_poses, bottom_names, bottom_nums, bottom_lrs, 先攻チーム, 後攻チーム, 表裏, mr): # member_re_file パラメータは削除されました。
+
+    init_db() # ページ関数の開始時にデータベースを初期化します。
 
     # 初期選択のためにデータベースから大学のリストを取得します。
     team_list = member_df['大学名'].unique()
@@ -89,7 +92,9 @@ def member_page(member_df, top_poses, top_names, top_nums, top_lrs, bottom_poses
             URL = st.text_input('', label_visibility='collapsed')
         with col03:
             if st.button('実行ボタン: Wi-Fiに接続してください'):
-                st.session_state.member_srape = 'success'  # スクレイピング成功のプレースホルダー
+                # member_requests.scrape_stamem が利用可能であることを前提としています。
+                # top_poses, top_names, top_nums, top_lrs, bottom_poses, bottom_names, bottom_nums, bottom_lrs, st.session_state.top_team, st.session_state.bottom_team, st.session_state.member_srape = member_requests.scrape_stamem(URL)
+                st.session_state.member_srape = 'success' # スクレイピング成功のプレースホルダー
 
     col1, col2 = st.columns(2)
     with col1:
@@ -151,7 +156,7 @@ def member_page(member_df, top_poses, top_names, top_nums, top_lrs, bottom_poses
                 top_names[i] = st.text_input('', label_visibility='collapsed', key=f'top_name_{i}', value=top_names[i])
 
         # top_posesが2の名前を10番目に追加
-        for i in range(9):  # top_posesのi番目のポジションを検索
+        for i in range(9): # top_posesのi番目のポジションを検索
             for j in range(8):
                 if top_poses[i] == j+2:
                     top_names[j+10] = top_names[i]
@@ -189,7 +194,7 @@ def member_page(member_df, top_poses, top_names, top_nums, top_lrs, bottom_poses
                     pos_list2 = [bottom_poses[i], 'H', 'R']
                 else:
                     pos_list2 = [bottom_poses[i], 2, 3, 4, 5, 6, 7, 8, 9, 'D', 'P']
-                bottom_poses[i] = st.selectbox('', pos_list2, label_visibility='collapsed', key=f'bottom_pos_{::contentReference[oaicite:9]{index=9}i}')
+                bottom_poses[i] = st.selectbox('', pos_list2, label_visibility='collapsed', key=f'bottom_pos_{i}')
             st.write('#### P')
 
         with col22:
@@ -197,13 +202,14 @@ def member_page(member_df, top_poses, top_names, top_nums, top_lrs, bottom_poses
                 bottom_nums[i] = st.text_input('', label_visibility='collapsed', key=f'bottom_num_{i}', value=bottom_nums[i])
                 try:
                     num2 = str(bottom_nums[i])
-                    matched2 = bottom_list[bottom_list['背番号'].astype(str) == num2]
+                    matched2 = bottom_list[bottom_list['背番号'] == num2]
                     if not matched2.empty:
                         bottom_names[i] = matched2.iloc[0]['名前']
                         bottom_lrs[i] = matched2.iloc[0]['左右']
                     else:
                         bottom_names[i] = ''
                         bottom_lrs[i] = ''
+
                 except ValueError:
                     bottom_names[i] = ''
                     bottom_lrs[i] = ''
@@ -212,8 +218,8 @@ def member_page(member_df, top_poses, top_names, top_nums, top_lrs, bottom_poses
             for i in range(10):
                 bottom_names[i] = st.text_input('', label_visibility='collapsed', key=f'bottom_name_{i}', value=bottom_names[i])
 
-        # bottom_posesが2の名前を10番目以降に追加
-        for i in range(9):  # bottom_posesのi番目のポジションを検索
+        # bottom_posesが2の名前を10番目に追加
+        for i in range(9): # top_posesのi番目のポジションを検索
             for j in range(8):
                 if bottom_poses[i] == j+2:
                     bottom_names[j+10] = bottom_names[i]
@@ -229,8 +235,4 @@ def member_page(member_df, top_poses, top_names, top_nums, top_lrs, bottom_poses
             st.success('入力完了しました')
             st.session_state.page_ctg = 'main'
 
-    return (
-        st.session_state.top_team, st.session_state.bottom_team,
-        top_poses, top_names, top_nums, top_lrs,
-        bottom_poses, bottom_names, bottom_nums, bottom_lrs
-    )
+        return st.session_state.top_team, st.session_state.bottom_team, top_poses, top_names, top_nums, top_lrs, bottom_poses, bottom_names, bottom_nums, bottom_lrs
