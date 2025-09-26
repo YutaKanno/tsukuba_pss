@@ -153,7 +153,7 @@ def member_page(member_df, top_poses, top_names, top_nums, top_lrs, bottom_poses
 
         with col14:
             for i in range(10):
-                key_name = f'top_name_{st.session_state.top_team}_{i}'
+                key_name = f'{st.session_state.top_team}_{top_nums[i]}'
                 top_names[i] = st.text_input('', label_visibility='collapsed', key=key_name, value=top_names[i])
 
         # top_posesが2の名前を10番目に追加
