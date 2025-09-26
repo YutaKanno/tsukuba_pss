@@ -219,7 +219,8 @@ def member_page(member_df, top_poses, top_names, top_nums, top_lrs, bottom_poses
 
         with col23:
             for i in range(10):
-                bottom_names[i] = st.text_input('', label_visibility='collapsed', key=f'bottom_name_{i}', value=bottom_names[i])
+                key_name2 = f'{st.session_state.bottom_team}_{bottom_nums[i]}'
+                bottom_names[i] = st.text_input('', label_visibility='collapsed', key=key_name2, value=bottom_names[i])
 
         # bottom_posesが2の名前を10番目に追加
         for i in range(9): # top_posesのi番目のポジションを検索
