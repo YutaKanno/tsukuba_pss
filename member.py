@@ -141,13 +141,17 @@ def member_page(member_df, top_poses, top_names, top_nums, top_lrs, bottom_poses
                 try:
                     num = str(top_nums[i])
                     matched = top_list[top_list['背番号'] == num]
+                    st.write(top_list['背番号'])
+                    st.write(num)
                     if not matched.empty:
                         top_names[i] = matched.iloc[0]['名前']
                         top_lrs[i] = matched.iloc[0]['左右']
                     else:
+                        st.write('一致するメンバーがいません')
                         top_names[i] = ''
                         top_lrs[i] = ''
                 except ValueError:
+                    st.write('フィルタをかける段階でエラーが出ました')
                     top_names[i] = ''
                     top_lrs[i] = ''
 
@@ -207,10 +211,12 @@ def member_page(member_df, top_poses, top_names, top_nums, top_lrs, bottom_poses
                         bottom_names[i] = matched2.iloc[0]['名前']
                         bottom_lrs[i] = matched2.iloc[0]['左右']
                     else:
+                        st.write('一致するメンバーがいません')
                         bottom_names[i] = ''
                         bottom_lrs[i] = ''
 
                 except ValueError:
+                    st.write('フィルタをかける段階でエラーが出ました')
                     bottom_names[i] = ''
                     bottom_lrs[i] = ''
 
