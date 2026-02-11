@@ -27,7 +27,7 @@ def safe_eval(val):
 st.set_page_config(
     page_title="Tsukuba PSS",
     page_icon="tsukuba_logo.png",
-    layout="wide",  # ウィンドウサイズに合わせて広く表示
+    layout="wide",  
 )
 
 hide_all_style = """
