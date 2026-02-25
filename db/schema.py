@@ -16,12 +16,26 @@ except ImportError:
     pass
 
 DB_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'app_data.db')
-_DATABASE_URL: Optional[str] = os.environ.get('DATABASE_URL') or None
+
+def _resolve_database_url() -> Optional[str]:
+    url = os.environ.get('DATABASE_URL')
+    if url:
+        return url
+    try:
+        import streamlit as _st
+        return _st.secrets.get("DATABASE_URL")
+    except Exception:
+        return None
+
+def _get_database_url() -> Optional[str]:
+    """毎回 DATABASE_URL を解決する（Streamlit Cloud では secrets の初期化タイミングが遅い場合があるため）"""
+    return _resolve_database_url()
 
 
 def is_postgres() -> bool:
     """True if using Supabase/PostgreSQL (DATABASE_URL set)."""
-    return _DATABASE_URL is not None and _DATABASE_URL.strip() != ''
+    url = _get_database_url()
+    return url is not None and url.strip() != ''
 
 
 # PostgreSQL: quote identifiers that are quoted in supabase_schema (unquoted are lowercased)
@@ -95,7 +109,7 @@ def get_conn() -> Union[sqlite3.Connection, _PgConnWrapper]:
     """Return a connection to the app database (SQLite or Supabase PostgreSQL)."""
     if is_postgres():
         import psycopg2
-        conn = psycopg2.connect(_DATABASE_URL)
+        conn = psycopg2.connect(_get_database_url())
         return _PgConnWrapper(conn)
     return sqlite3.connect(DB_FILE)
 
