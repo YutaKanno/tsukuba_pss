@@ -1,15 +1,17 @@
-import streamlit as st
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-import plotly.graph_objects as go
-import plate
-import field
-import cal_stats
-from datetime import datetime
+"""試合メイン画面: データ入力・成績表示・データ一覧。"""
 import io
+from datetime import datetime
 
-def update_list(list, top_poses, top_names, top_nums, top_lrs, bottom_poses, bottom_names, bottom_nums, bottom_lrs, top_score, bottom_score):
+import pandas as pd
+import plotly.graph_objects as go
+import streamlit as st
+
+import cal_stats
+import field
+import plate
+from config import COLUMN_NAMES, IDX
+
+def update_list( list, top_poses, top_names, top_nums, top_lrs, bottom_poses, bottom_names, bottom_nums, bottom_lrs, top_score, bottom_score ):
 
     試合日時 = list[0]
     Season = list[1]
@@ -23,13 +25,13 @@ def update_list(list, top_poses, top_names, top_nums, top_lrs, bottom_poses, bot
     プレイの番号 = int(list[9]) + 1
     イニング継続 = list[18]
     試合継続 = list[19]
-    開始時刻 = st.session_state['開始時刻']
+    開始時刻 = st.session_state[ '開始時刻' ]
 
-    現在時刻 = datetime.now().strftime('%H:%M:%S')
+    現在時刻 = datetime.now().strftime( '%H:%M:%S' )
     if 開始時刻 in ['', 0]:
         経過時間 = '0:00'
     else:
-        経過時間 = datetime.strptime(現在時刻, '%H:%M:%S') - datetime.strptime(開始時刻, '%H:%M:%S')
+        経過時間 = datetime.strptime( 現在時刻, '%H:%M:%S' ) - datetime.strptime( 開始時刻, '%H:%M:%S' )
     
     # 得点数
     先攻得点 = list[12]
@@ -78,9 +80,9 @@ def update_list(list, top_poses, top_names, top_nums, top_lrs, bottom_poses, bot
         new_out += 1
     if list[38] in ['封殺', '投手牽制死', '捕手牽制死']:
         new_out += 1
-    if new_out >= 3: #攻守交替条件
+    if new_out >= 3:  # 攻守交替
         アウト = 0
-        イニング継続 == 'イニング開始'
+        イニング継続 = 'イニング開始'
         一走打順, 一走氏名, 一走状況 = 0,0,0
         二走打順, 二走氏名, 二走状況 = 0,0,0
         三走打順, 三走氏名, 三走状況 = 0,0,0
@@ -289,27 +291,22 @@ def update_list(list, top_poses, top_names, top_nums, top_lrs, bottom_poses, bot
 
 
 def main_page(list):
-    column_names = [
-                            "試合日時", "Season", "Kind", "Week", "Day", "GameNumber", "主審", "後攻チーム", "先攻チーム", "プレイの番号", "回", "表.裏", 
-                            "先攻得点", "後攻得点", "S", "B", "アウト", "打席の継続", "イニング継続", "試合継続", "一走打順", "一走氏名", "二走打順", 
-                            "二走氏名", "三走打順", "三走氏名", "打順", "打者氏名", "打席左右", "作戦", "作戦2", "作戦結果", "投手氏名", "投手左右", 
-                            "球数", "捕手", "一走状況", "二走状況", "三走状況", "打者状況", "プレイの種類", "構え", "コースX", "コースY", "球種", 
-                            "打撃結果", "打撃結果2", "捕球選手", "打球タイプ", "打球強度", "打球位置X", "打球位置Y", "牽制の種類", "牽制詳細", 
-                            "エラーの種類", "タイムの種類", "球速", "プレス", "偽走", "打者位置", "打席Id", "打席結果", "Result_col", "打者登録名", 
-                            "打者番号", "一走登録名", "一走番号", "二走登録名", "二走番号", "三走登録名", "三走番号", "投手番号", "入力項目", 
-                            "先攻打順", "後攻打順", "経過時間", "開始時刻", "現在時刻",  "top_poses", "top_names", "top_nums", "top_lrs",
-                            "bottom_poses", "bottom_names", "bottom_nums", "bottom_lrs",
-                            "top_score", "bottom_score"
-                        ]
-    
-    dataframe = pd.DataFrame(st.session_state['all_list'], columns=column_names)
+    column_names = COLUMN_NAMES
+    all_list = st.session_state[ 'all_list' ]
+    n = len(all_list)
+    cache_key = 'cached_dataframe'
+    cache_len_key = 'cached_all_list_len'
+    if cache_key not in st.session_state or st.session_state.get(cache_len_key) != n:
+        st.session_state[cache_key] = pd.DataFrame(all_list, columns=column_names)
+        st.session_state[cache_len_key] = n
+    dataframe = st.session_state[cache_key]
     
     if '開始時刻' not in st.session_state:
-        st.session_state['開始時刻'] = list[76]
+        st.session_state[ '開始時刻' ] = list[76]
     if '現在時刻' not in st.session_state:
-        st.session_state['現在時刻'] = list[77]
+        st.session_state[ '現在時刻' ] = list[77]
     if '経過時間' not in st.session_state:
-        st.session_state['経過時間'] = list[75]
+        st.session_state[ '経過時間' ] = list[75]
 
 
 
@@ -322,14 +319,17 @@ def main_page(list):
     
 
     if 'data_list' not in st.session_state:
-        st.session_state['data_list'] = updated_list
-    current_list = st.session_state['data_list']
+        st.session_state[ 'data_list' ] = updated_list
+    current_list = st.session_state[ 'data_list' ]
     
     
     
 
     試合日時, Season, Kind, Week, Day, GameNumber = current_list[0:6]
     主審, 後攻チーム, 先攻チーム, プレイの番号, 回, 表裏 = current_list[6:12]
+    df_current = dataframe[dataframe['試合日時'].astype(str) == str(試合日時)] if not dataframe.empty else dataframe
+    if df_current.empty:
+        df_current = dataframe
     先攻得点, 後攻得点, S, B, アウト, 打席の継続 = current_list[12:18]
     イニング継続, 試合継続, 一走打順, 一走氏名, 二走打順, 二走氏名 = current_list[18:24]
     三走打順, 三走氏名, 打順, 打者氏名, 打席左右, 作戦 = current_list[24:30]
@@ -370,7 +370,7 @@ def main_page(list):
         
     
     
-    st.session_state['エラー選手'] = 0    
+    st.session_state[ 'エラー選手' ] = 0    
         
     
         
@@ -418,7 +418,7 @@ def main_page(list):
             二走氏名 = bottom_names[二走打順-1]
         if 三走状況 not in ['0', 0]:
             三走氏名 = bottom_names[三走打順-1]
-    stats = cal_stats.cal_stats(dataframe, 投手氏名, opponent_p, 打者氏名, next_batter, 試合日時)
+    stats = cal_stats.cal_stats(df_current, 投手氏名, opponent_p, 打者氏名, next_batter, 試合日時)
     球数 = stats[24]+1
 
     if not st.session_state["already_rerun"]:
@@ -458,7 +458,10 @@ def main_page(list):
     
     tab2, tab1, tab3 = st.tabs(['メニュー', 'データ入力', 'データ一覧'])
     with tab3:
-        st.dataframe(dataframe.astype(str))
+        _display_rows = 150
+        df_display = dataframe.tail(_display_rows).astype(str) if len(dataframe) > _display_rows else dataframe.astype(str)
+        st.caption(f"直近{min(len(dataframe), _display_rows)}件を表示（全{len(dataframe)}件）")
+        st.dataframe(df_display, height=400)
 
         
     with tab1:
@@ -469,7 +472,7 @@ def main_page(list):
                 col31, col32 = st.columns([1,5])
                 with col31:
                     # 球種の出現数を取得
-                    labels, values = cal_stats.pt_pct(投手氏名, dataframe)
+                    labels, values = cal_stats.pt_pct(投手氏名, df_current)
 
                     # カラーパレットを定義
                     palette = {
@@ -489,34 +492,36 @@ def main_page(list):
                     colors = [palette.get(label, "#CCCCCC") for label in labels]  # 未定義の球種には灰色を指定
 
                     # 円グラフを作成
-                    fig = go.Figure(data=[go.Pie(
-                        labels=labels,
-                        values=values,
-                        showlegend=False,
-                        textinfo='none',
-                        marker=dict(colors=colors),
-                        hole=0  # ドーナツ型ではない
-                    )])
+                    fig = go.Figure(
+                        data = [
+                            go.Pie(
+                                labels     = labels,
+                                values     = values,
+                                showlegend = False,
+                                textinfo   = 'none',
+                                marker     = dict( colors = colors ),
+                                hole       = 0,  # ドーナツ型ではない
+                            )
+                        ]
+                    )
 
-                    # レイアウトを指定してサイズと余白を制御
+                    # レイアウト: 円グラフをかなり小さく（高さ100px、中のグラフは60%）
                     fig.update_layout(
-                        margin=dict(l=0, r=0, t=0, b=0),
-                        height=70,
-                        width=50,
-                        showlegend=False
+                        margin     = dict( l = 0, r = 0, t = 0, b = 0 ),
+                        height     = 100,
+                        showlegend = False,
                     )
 
-                    # domainでサイズをさらに調整
+                    # 円グラフを中央60%に収める
                     fig.update_traces(
-                        domain=dict(x=[0, 1], y=[0, 1])
+                        domain = dict( x = [ 0.2, 0.8 ], y = [ 0.2, 0.8 ] )
                     )
 
-                    # Streamlitで表示
-                    # Streamlitで表示
+                    # Streamlitで表示（列幅いっぱいに描画）
                     st.plotly_chart(
                         fig,
-                        config={"displayModeBar": False},  # 表示設定（例: ツールバー非表示）
-                        use_container_width=False
+                        config = { "displayModeBar": False },
+                        width  = "stretch",
                     )
 
 
@@ -548,7 +553,7 @@ def main_page(list):
                     <table class="custom">
                     <tr>
                         <th>日付</th><td colspan="2">{試合日時}</td>
-                        <th>時刻</th><td colspan="3">{st.session_state['経過時間']}</td>
+                        <th>時刻</th><td colspan="3">{st.session_state[ '経過時間' ]}</td>
                         <td class="green"><b>B</b></td>
                         <td class="green circle">{b_count}</td>
                     </tr>
@@ -609,7 +614,7 @@ def main_page(list):
 
                 with col11:
                     aim = st.radio('構え', options, key="radio_selection")
-                    st.session_state['構え_aim'] = aim
+                    st.session_state[ '構え_aim' ] = aim
 
                     if aim == '3高':
                         構え = st.radio('', [7, 6, 1, 2], label_visibility='collapsed', key='stance_3ba')
@@ -631,7 +636,7 @@ def main_page(list):
                         構え = st.radio('', [19, 20, 24, 25], label_visibility='collapsed', key='stance_1bc')
                     else:
                         構え = 0
-                    st.session_state['構え'] = 構え  # 構えの最終的な選択状態を保存
+                    st.session_state[ '構え' ] = 構え  # 構えの最終的な選択状態を保存
                 with col12:
                     コースX, コースY = plate.plate(打席左右)
                     
@@ -639,13 +644,13 @@ def main_page(list):
                     
                 with col13:
                     if st.button('Tag'):
-                        st.session_state['現在時刻'] = datetime.now().strftime('%H:%M:%S')
-                        現在時刻 = datetime.now().strftime('%H:%M:%S')
-                        if st.session_state['開始時刻'] in ['', 0]:
-                            st.session_state['経過時間'] = '0:00'
+                        st.session_state[ '現在時刻' ] = datetime.now().strftime( '%H:%M:%S' )
+                        現在時刻 = datetime.now().strftime( '%H:%M:%S' )
+                        if st.session_state[ '開始時刻' ] in ['', 0]:
+                            st.session_state[ '経過時間' ] = '0:00'
                         else:
-                            st.session_state['経過時間'] = datetime.strptime(st.session_state['現在時刻'], '%H:%M:%S') - datetime.strptime(st.session_state['開始時刻'], '%H:%M:%S')
-                        st.success(st.session_state['経過時間'])
+                            st.session_state[ '経過時間' ] = datetime.strptime( st.session_state[ '現在時刻' ], '%H:%M:%S' ) - datetime.strptime( st.session_state[ '開始時刻' ], '%H:%M:%S' )
+                        st.success(st.session_state[ '経過時間' ])
                         
                     st.write(f'{コースX}-{コースY}')
                     r_state = [0, 0, 0]
@@ -988,7 +993,7 @@ def main_page(list):
                         elif result_ctg == 'sacrifice':
                             with col02:
                                 打撃結果 = st.radio('入力してください', ['0', '犠打', '犠飛', '犠打失策'], key='batting_result_sac')
-                        st.session_state['打撃結果'] = 打撃結果
+                        st.session_state[ '打撃結果' ] = 打撃結果
 
                     打撃結果2 = '0'
                     if st.session_state.get('打撃結果', '0') != '0':
@@ -1005,7 +1010,7 @@ def main_page(list):
 
 
                 # R状況の処理
-                if result_ctg == 'continue' and st.session_state['打撃結果'] not in ['見逃し三振', '空振り三振', '四球']:
+                if result_ctg == 'continue' and st.session_state[ '打撃結果' ] not in ['見逃し三振', '空振り三振', '四球']:
                     打席の継続 = '打席継続'
                 else:
                     打席の継続 = '打席完了'
@@ -1078,7 +1083,7 @@ def main_page(list):
 
 
             with col2:
-                h_top, e_top, k_top, b_top, h_bottom, e_bottom, k_bottom, b_bottom = cal_stats.calc_hekb(dataframe, 先攻チーム, 後攻チーム, 試合日時)
+                h_top, e_top, k_top, b_top, h_bottom, e_bottom, k_bottom, b_bottom = cal_stats.calc_hekb(df_current, 先攻チーム, 後攻チーム, 試合日時)
 
                 top_score[12:16] = [h_top, e_top, k_top, b_top]
                 bottom_score[12:16] = [h_bottom, e_bottom, k_bottom, b_bottom]
@@ -1214,7 +1219,7 @@ def main_page(list):
                                 球速 = int(f'1{first_number}{second_number}')
                         except ValueError:
                             球速 = 0 # エラーハンドリング
-                        st.session_state['球速'] = 球速
+                        st.session_state[ '球速' ] = 球速
                         
 
 
@@ -1281,8 +1286,10 @@ def main_page(list):
                         """
                         st.markdown(button_css, unsafe_allow_html=True)
                         if st.button('.　　　確定　　　.', key='confirm_button'):
-                            
-                            if 打撃結果 == 'エラー' and エラー選手 == 0 and プレイの種類 == '投球':
+                            # 試合未開始時はデータ入力を拒否
+                            if st.session_state.get('current_game_id') is None:
+                                st.error('試合が開始されていません。ホームで「試合開始」を押し、スタメン・試合情報を入力して確定してから、データ入力をおこなってください。')
+                            elif 打撃結果 == 'エラー' and エラー選手 == 0 and プレイの種類 == '投球':
                                 st.warning('エラー選手が未入力')
                             if 構え in ['0', 0] and プレイの種類 == '投球':
                                 st.warning('構えが未入力')
@@ -1299,7 +1306,13 @@ def main_page(list):
                             elif (result_ctg not in ['continue', 'K', 'BB'] or 打撃結果 == 'ファール') and (打球タイプ in ['0', 0]) and プレイの種類 == '投球':
                                 st.warning('打球タイプが未入力')
                             else:
-                        
+                                # 同一プレイの二重登録防止（ダブルクリック対策）
+                                gid = st.session_state.get('current_game_id')
+                                play_key = (gid, プレイの番号, 回, 表裏)
+                                if st.session_state.get('last_confirmed_play_key') == play_key:
+                                    st.rerun()
+                                st.session_state['last_confirmed_play_key'] = play_key
+
                                 inputed_list = [
                                     試合日時, Season, Kind, Week, Day, GameNumber,
                                     主審, 後攻チーム, 先攻チーム, プレイの番号, 回, 表裏,
@@ -1311,22 +1324,28 @@ def main_page(list):
                                     打球タイプ, 打球強度, 打球位置X, 打球位置Y, 牽制の種類, 牽制詳細, エラーの種類, エラー選手,
                                     球速, プレス, 偽走, 打者位置, コメント, 打席結果,
                                     Result_col, 打者登録名, 打者番号, 一走登録名, 一走番号, 二走登録名, 二走番号, 三走登録名, 三走番号, 投手番号,
-                                    入力項目, 先攻打順, 後攻打順, st.session_state['経過時間'], st.session_state['開始時刻'], st.session_state['現在時刻'],
+                                    入力項目, 先攻打順, 後攻打順, st.session_state[ '経過時間' ], st.session_state[ '開始時刻' ], st.session_state[ '現在時刻' ],
                                     top_poses, top_names, top_nums, top_lrs, bottom_poses, bottom_names, bottom_nums, bottom_lrs,
                                     top_score, bottom_score
                                     ]
                                 
                                 
-                                st.session_state['all_list'].append(inputed_list)
+                                st.session_state[ 'all_list' ].append(inputed_list)
+                                if gid is not None:
+                                    try:
+                                        from db import game_repo
+                                        game_repo.insert_play(gid, inputed_list)
+                                    except Exception as e:
+                                        st.warning(f"プレイデータの保存に失敗しました: {e}")
+                                if 'cached_all_list_len' in st.session_state:
+                                    st.session_state['cached_all_list_len'] = -1
                                 
-                                dataframe = pd.DataFrame(st.session_state['all_list'], columns=column_names)
-                                
-                                st.session_state['現在時刻'] = datetime.now().strftime('%H:%M:%S')
+                                st.session_state[ '現在時刻' ] = datetime.now().strftime( '%H:%M:%S' )
                                 print(開始時刻)
                                 if 開始時刻 in ['']:
-                                    st.session_state['経過時間'] = '0:00'
+                                    st.session_state[ '経過時間' ] = '0:00'
                                 else:
-                                    st.session_state['経過時間'] = datetime.strptime(st.session_state['現在時刻'], '%H:%M:%S') - datetime.strptime(st.session_state['開始時刻'], '%H:%M:%S')
+                                    st.session_state[ '経過時間' ] = datetime.strptime( st.session_state[ '現在時刻' ], '%H:%M:%S' ) - datetime.strptime( st.session_state[ '開始時刻' ], '%H:%M:%S' )
                                 
                                 
                                 
@@ -1375,9 +1394,9 @@ def main_page(list):
                                 
                                 updated_list = update_list(inputed_list, top_poses, top_names, top_nums, top_lrs, bottom_poses, bottom_names, bottom_nums, bottom_lrs, top_score, bottom_score)
                                 
-                                st.session_state['data_list'] = updated_list
+                                st.session_state[ 'data_list' ] = updated_list
                                 
-                                st.session_state['打撃結果'], st.session_state['エラー選手'], エラー選手 = '0', 0, 0 
+                                st.session_state[ '打撃結果' ], st.session_state[ 'エラー選手' ], エラー選手 = '0', 0, 0 
                                 st.session_state.reset_flag = True
                                 r0_state, r1_state, r2_state, r3_state = '継続', updated_list[36], updated_list[37], updated_list[38]
                                 
@@ -1386,17 +1405,44 @@ def main_page(list):
                                 st.rerun() # 画面を再表示
         
     with tab2:
+        # 試合終了（スタート画面に戻る）
+        if st.button( "試合終了（スタートに戻る）" ):
+            for key in [
+                "all_list",
+                "temp_list",
+                "data_list",
+                "current_game_id",
+                "経過時間",
+                "開始時刻",
+                "現在時刻",
+                "cached_dataframe",
+                "cached_all_list_len",
+                "already_rerun",
+            ]:
+                if key in st.session_state:
+                    del st.session_state[ key ]
+            st.session_state.page_ctg = "start"
+            st.session_state.game_start = "continue"
+            st.rerun()
         st.write('## 試合開始')
-        st.success(f"試合開始: {st.session_state['開始時刻']}")
+        st.success(f"試合開始: {st.session_state[ '開始時刻' ]}")
         if st.button('試合開始'):
-            st.session_state['開始時刻'] = datetime.now().strftime('%H:%M:%S')
-            st.success(f"試合開始: {st.session_state['開始時刻']}")
+            st.session_state[ '開始時刻' ] = datetime.now().strftime( '%H:%M:%S' )
+            st.success(f"試合開始: {st.session_state[ '開始時刻' ]}")
         st.write('---')
         st.markdown(f"## 設定")
         if st.button('1つ削除して戻る'):
-            if st.session_state['all_list']:
-                
-                last_entry = st.session_state['all_list'].pop()
+            if st.session_state[ 'all_list' ]:
+                gid = st.session_state.get('current_game_id')
+                if gid is not None:
+                    try:
+                        from db import game_repo
+                        game_repo.delete_last_play(gid)
+                    except Exception:
+                        pass
+                last_entry = st.session_state[ 'all_list' ].pop()
+                if 'cached_all_list_len' in st.session_state:
+                    st.session_state['cached_all_list_len'] = -1
 
                 表裏 = last_entry[11] 
                 回 = last_entry[12]  
@@ -1451,7 +1497,7 @@ def main_page(list):
 
                 # 一覧を再更新
                 updated_list = update_list(
-                    st.session_state['all_list'][-1],
+                    st.session_state[ 'all_list' ][-1],
                     top_poses, top_names, top_nums, top_lrs,
                     bottom_poses, bottom_names, bottom_nums, bottom_lrs,
                     top_score,
@@ -1459,7 +1505,7 @@ def main_page(list):
                 )
 
                 # 状態更新
-                st.session_state['data_list'] = updated_list
+                st.session_state[ 'data_list' ] = updated_list
                 st.session_state.reset_flag = True
 
                 # キャンバスをクリアして再表示
@@ -1471,9 +1517,7 @@ def main_page(list):
             st.session_state.page_ctg = 'member'
             
         csv_str = dataframe.to_csv(index=False)
-        
-        # バイト列に変換（UTF-8ならそのままOK、Shift-JISで保存したいならencode指定）
-        csv_bytes = csv_str.encode('cp932')
+        csv_bytes = csv_str.encode("utf-8-sig")
         
         # バッファに乗せる
         csv_buffer = io.BytesIO(csv_bytes)
@@ -1509,7 +1553,7 @@ def main_page(list):
         if st.button('変更確定'):
             # 初期確認：data_list が存在するか、ない場合はエラー表示
             if 'data_list' in st.session_state:
-                current_data2 = st.session_state['data_list'].copy()
+                current_data2 = st.session_state[ 'data_list' ].copy()
                 
                 # 型変換（文字列を整数に直すなど）
                 try:
@@ -1575,7 +1619,7 @@ def main_page(list):
                 
                 
                 # 更新反映
-                st.session_state['data_list'] = updated_list_
+                st.session_state[ 'data_list' ] = updated_list_
             
                 st.success('変更を反映しました')
                 st.rerun()
@@ -1585,7 +1629,7 @@ def main_page(list):
             
 
 
-        return st.session_state['data_list']
+        return st.session_state[ 'data_list' ]
 
 
 

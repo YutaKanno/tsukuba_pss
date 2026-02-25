@@ -1,51 +1,56 @@
+"""
+Field image and click handling for hit position.
+"""
+import os
+import uuid
+
 import streamlit as st
 from PIL import Image, ImageDraw, ImageFont
-import os
 from streamlit_image_coordinates import streamlit_image_coordinates
-import uuid # uuidモジュールをインポート
 
 
-# @st.cache_resource は重いリソースの読み込みに最適
 @st.cache_resource
 def load_bg_image():
-    # RGBAに変換しておくことで、後から描画する要素の透明度を扱える
-    return Image.open("Field3.png").convert("RGBA")
+    """Load field background and convert to RGBA for transparency."""
+    path = os.path.join( os.path.dirname( __file__ ), "assets", "Field3.png" )
+    return Image.open( path ).convert( "RGBA" )
+
 
 @st.cache_resource
 def load_fonts():
     try:
         # パスが通っていない可能性があるので、os.path.joinを使うとより堅牢です
         # しかし、ipaexg.ttf が Streamlit アプリのどこに置かれているかによる
-        font = ImageFont.truetype('ipaexg.ttf', 13)
-        font2 = ImageFont.truetype('ipaexg.ttf', 27)
+        font_path = os.path.join( os.path.dirname( __file__ ), 'fonts', 'ipaexg.ttf' )
+        font = ImageFont.truetype( font_path, 13 )
+        font2 = ImageFont.truetype( font_path, 27 )
     except:
         # フォントが見つからない場合のフォールバック
         font = ImageFont.load_default()
         font2 = ImageFont.load_default()
     return font, font2
 
-# clear_canvas 関数を修正
-def clear_canvas():
-    if 'image_clicker_unique_key' not in st.session_state:
-        st.session_state.image_clicker_unique_key = str(uuid.uuid4())
 
-    # 最新のクリック座標をNoneにリセット
+def clear_canvas() -> None:
+    """Reset field click state."""
+    if 'image_clicker_unique_key' not in st.session_state:
+        st.session_state.image_clicker_unique_key = str( uuid.uuid4() )
+
     st.session_state.latest_point = None
-    # streamlit_image_coordinates のキーを再生成して状態をリセット
-    st.session_state.image_clicker_unique_key = str(uuid.uuid4())
+    st.session_state.image_clicker_unique_key = str( uuid.uuid4() )
     # 画面を再実行して変更を反映
     st.rerun()
 
-def field(player_list, r_state):
+def field( player_list, r_state ):
     # --- session_state の初期化 ---
     if 'image_clicker_unique_key' not in st.session_state:
         st.session_state.image_clicker_unique_key = str(uuid.uuid4())
 
     if 'latest_point' not in st.session_state:
-        st.session_state.latest_point = {'x': 0, 'y': 0}
+        st.session_state.latest_point = { 'x': 0, 'y': 0 }
 
     if 'latest_clicked_point' not in st.session_state:
-        st.session_state.latest_clicked_point = {'x': 0, 'y': 0}
+        st.session_state.latest_clicked_point = { 'x': 0, 'y': 0 }
 
     if 'image_key_counter' not in st.session_state:
         st.session_state.image_key_counter = 0
@@ -99,7 +104,7 @@ def field(player_list, r_state):
     # 座標取得 (一意なキーを使用)
     coords = streamlit_image_coordinates(
         bg_image,
-        key=st.session_state.image_clicker_unique_key # ここでユニークなキーを使用
+        key = st.session_state.image_clicker_unique_key # ここでユニークなキーを使用
     )
 
     # 新しいクリックがあれば更新して再描画

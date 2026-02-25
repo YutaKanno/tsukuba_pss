@@ -3,14 +3,14 @@ from bs4 import BeautifulSoup  # HTMLやXMLを解析するためのライブラ�
 
 url = "https://baseball.omyutech.com/CupHomePageMember.action?gameId=20250868556"  # スクレイピングしたいWebページのURLを設定します
 
-def scrape_stamem(url):
+def scrape_stamem( url ):
     try:
-        response = requests.get(url)  # 指定されたURLにGETリクエストを送信し、サーバーからの応答（レスポンス）を取得します
+        response = requests.get( url )  # 指定されたURLにGETリクエストを送信し、サーバーからの応答（レスポンス）を取得します
         response.raise_for_status()  
-        soup = BeautifulSoup(response.content, 'html.parser')
+        soup = BeautifulSoup( response.content, 'html.parser' )
 
-        sta_mem_top = soup.find('table', class_='mem-startmen')
-        top_team = f"{soup.find('th', class_='member_header carp').text.strip()}学"
+        sta_mem_top = soup.find( 'table', class_ = 'mem-startmen' )
+        top_team = f"{soup.find( 'th', class_ = 'member_header carp' ).text.strip()}学"
         if top_team == '日体大学':
             top_team = '日本体育大学'
         elif top_team == '桜美大学':
@@ -88,8 +88,8 @@ def scrape_stamem(url):
 
 
 
-        sta_mem_bottom = soup.find_all('table', class_='mem-startmen')[1]
-        bottom_team = f"{soup.find('th', class_='member_header tigers').text.strip()}学"
+        sta_mem_bottom = soup.find_all( 'table', class_ = 'mem-startmen' )[ 1 ]
+        bottom_team = f"{soup.find( 'th', class_ = 'member_header tigers' ).text.strip()}学"
         if bottom_team == '日体大学':
             bottom_team = '日本体育大学'
         elif bottom_team == '桜美大学':

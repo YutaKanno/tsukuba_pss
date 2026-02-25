@@ -5,7 +5,7 @@ a = Analysis(
     ['tsukubax.py'],
     pathex=[],
     binaries=[],
-    datas=[('main_page.py', '.'), ('member.py', '.'), ('plate.py', '.'), ('field.py', '.'), ('cal_stats.py', '.'), ('game_data.csv', '.'), ('メンバー登録用.csv', '.'), ('member_remember.csv', '.'), ('Field3.png', '.'), ('Plate_L.png', '.'), ('Plate_R.png', '.'), ('ipaexg.ttf', '.'), ('ipaexm.ttf', '.')],
+    datas=[('main_page.py', '.'), ('member.py', '.'), ('plate.py', '.'), ('field.py', '.'), ('cal_stats.py', '.'), ('config.py', '.'), ('db', 'db'), ('assets/Field3.png', 'assets'), ('assets/Plate_L.png', 'assets'), ('assets/Plate_R.png', 'assets'), ('assets/tsukuba_logo.png', 'assets'), ('assets/icon.ico', 'assets'), ('fonts/ipaexg.ttf', 'fonts'), ('fonts/ipaexm.ttf', 'fonts')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

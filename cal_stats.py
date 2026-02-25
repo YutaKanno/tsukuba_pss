@@ -1,12 +1,28 @@
-def cal_stats(df, 投手氏名, 相手投手, 打者氏名, 次打者氏名, 試合日時):
-    def safe_div(numerator, denominator, scale=1000):
-        return round(scale* numerator / denominator) if denominator != 0 else '--'
+"""
+Compute pitcher/batter stats for display.
+"""
+from typing import Any, Union
 
-    def safe_rate(numerator, denominator):
-        return round(numerator / denominator, 2) if denominator != 0 else '--'
+import pandas as pd
 
-    def safe_round_div(numerator, denominator, decimals=1):
-        return round(numerator / denominator, decimals) if denominator != 0 else '--'
+
+def cal_stats(
+    df: pd.DataFrame,
+    投手氏名: str,
+    相手投手: str,
+    打者氏名: str,
+    次打者氏名: str,
+    試合日時: str,
+) -> dict:
+    """Return dict of today/season stats for the given pitcher and batters."""
+    def safe_div( numerator: Union[int, float], denominator: Union[int, float], scale: int = 1000 ) -> Any:
+        return round( scale * numerator / denominator ) if denominator != 0 else '--'
+
+    def safe_rate( numerator: Union[int, float], denominator: Union[int, float] ) -> Any:
+        return round( numerator / denominator, 2 ) if denominator != 0 else '--'
+
+    def safe_round_div( numerator: Union[int, float], denominator: Union[int, float], decimals: int = 1 ) -> Any:
+        return round( numerator / denominator, decimals ) if denominator != 0 else '--'
 
     # 今日の投手成績
     dfff = df[(df['投手氏名'] == 投手氏名) & (df['試合日時'] == 試合日時)]
@@ -171,7 +187,7 @@ def cal_stats(df, 投手氏名, 相手投手, 打者氏名, 次打者氏名, 試
 
 
 
-def pt_pct(投手氏名, df):
+def pt_pct( 投手氏名, df ):
     dff = df[(df['投手氏名'] == 投手氏名) & (df['プレイの種類'] == '投球')]
     counts = dff["球種"].value_counts()
     # ラベル（球種の種類）と値（出現数）をリスト化
@@ -180,7 +196,7 @@ def pt_pct(投手氏名, df):
     return labels, values
 
 
-def calc_hekb(df, 先攻チーム, 後攻チーム, 試合日時):
+def calc_hekb( df, 先攻チーム, 後攻チーム, 試合日時 ):
     dff = df[(df['試合日時'] == 試合日時) & (df['先攻チーム'] == 先攻チーム) & (df['後攻チーム'] == 後攻チーム)]
     dfft = dff[dff['表.裏'] == '表']
     h_top = len(dfft[dfft['打撃結果'].isin(['単打', '二塁打', '三塁打', '本塁打'])])
