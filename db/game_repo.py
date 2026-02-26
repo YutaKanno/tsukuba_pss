@@ -130,12 +130,12 @@ def get_game(game_id):
 
 
 def list_games(limit: int = 100) -> List[Tuple[Any, ...]]:
-    """Return list of games (newest first), each row (id, 試合日時, Season, 先攻, 後攻)."""
+    """Return list of games (newest first), each row (id, 試合日時, Season, Kind, 先攻, 後攻)."""
     schema.init_db()
     conn = schema.get_conn()
     c = conn.cursor()
     c.execute('''
-        SELECT g.id, g.試合日時, g.Season, t1.名前 AS 先攻, t2.名前 AS 後攻
+        SELECT g.id, g.試合日時, g.Season, g.Kind, t1.名前 AS 先攻, t2.名前 AS 後攻
         FROM game g
         JOIN team t1 ON g.先攻チーム_id = t1.id
         JOIN team t2 ON g.後攻チーム_id = t2.id

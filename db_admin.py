@@ -82,7 +82,7 @@ def run() -> None:
         else:
             df_games = pd.DataFrame(
                 games,
-                columns=["id", "試合日時", "Season", "先攻", "後攻"]
+                columns=["id", "試合日時", "Season", "Kind", "先攻", "後攻"]
             )
             st.dataframe(df_games, width="stretch")
             st.caption(f"直近 {len(games)} 試合（新しい順）")
@@ -93,7 +93,7 @@ def run() -> None:
         if not games:
             st.info("試合がまだありません。試合を開始してデータを入力すると保存できます。")
         else:
-            options = [f"id:{r[0]} — {r[1]} {r[2]} vs {r[3]}" for r in games]
+            options = [f"{r[1]} {r[2]} {r[3]} {r[4]} vs {r[5]}" for r in games]
             idx = st.selectbox(
                 "CSVにしたい試合を選択",
                 range(len(options)),
@@ -126,7 +126,7 @@ def run() -> None:
         if not games:
             st.info("削除できる試合がまだありません。")
         else:
-            options = [f"id:{r[0]} — {r[1]} {r[2]} vs {r[3]}" for r in games]
+            options = [f"{r[1]} {r[2]} {r[3]} {r[4]} vs {r[5]}" for r in games]
             idx = st.selectbox(
                 "削除したい試合を選択",
                 range(len(options)),

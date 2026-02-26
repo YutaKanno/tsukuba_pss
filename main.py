@@ -122,7 +122,7 @@ if st.session_state.page_ctg == "start":
         games = game_repo.list_games()
         if games:
             st.caption("試合を選んで「この試合を再開」を押すと、最後の入力行から再開できます。")
-            opts = [f"{r[1]} {r[2]} vs {r[3]} (id:{r[0]})" for r in games]
+            opts = [f"{r[1]} {r[2]} {r[3]} {r[4]} vs {r[5]}" for r in games]
             idx = st.selectbox("続きを行う試合を選択", range(len(opts)), format_func=lambda i: opts[i])
             if st.button("この試合を再開"):
                 gid = games[idx][0]
@@ -255,6 +255,12 @@ elif st.session_state.page_ctg == "member":
         t[7:9] = 後攻チーム, 先攻チーム
         t[27], t[28], t[32], t[33], t[35] = initial_top_names[0], initial_top_lrs[0], initial_bottom_names[9], initial_bottom_lrs[9], initial_bottom_names[10]
         t[0] = datetime.today().strftime("%Y/%m/%d")
+        t[1] = str(st.session_state.get("game_Season") or "")
+        t[2] = str(st.session_state.get("game_Kind") or "")
+        t[3] = str(st.session_state.get("game_Week") or "")
+        t[4] = str(st.session_state.get("game_Day") or "")
+        t[5] = str(st.session_state.get("game_GameNumber") or "")
+        t[6] = str(st.session_state.get("game_主審") or "")
 
     elif st.session_state.game_start == "continue":
         if not st.session_state["all_list"]:

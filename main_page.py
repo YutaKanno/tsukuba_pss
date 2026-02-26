@@ -28,10 +28,13 @@ def update_list( list, top_poses, top_names, top_nums, top_lrs, bottom_poses, bo
     開始時刻 = st.session_state[ '開始時刻' ]
 
     現在時刻 = datetime.now().strftime( '%H:%M:%S' )
-    if 開始時刻 in ['', 0]:
+    if not isinstance(開始時刻, str) or 開始時刻 in ['', '0']:
         経過時間 = '0:00'
     else:
-        経過時間 = datetime.strptime( 現在時刻, '%H:%M:%S' ) - datetime.strptime( 開始時刻, '%H:%M:%S' )
+        try:
+            経過時間 = datetime.strptime( 現在時刻, '%H:%M:%S' ) - datetime.strptime( 開始時刻, '%H:%M:%S' )
+        except ValueError:
+            経過時間 = '0:00'
     
     # 得点数
     先攻得点 = list[12]
@@ -377,9 +380,6 @@ def main_page(list):
         
     
     
-    if "already_rerun" not in st.session_state:
-        st.session_state["already_rerun"] = False
-
     if 表裏 == '表':
         offence_initial = 先攻チーム[0]
         if 打順 == 9:
@@ -421,41 +421,12 @@ def main_page(list):
     stats = cal_stats.cal_stats(df_current, 投手氏名, opponent_p, 打者氏名, next_batter, 試合日時)
     球数 = stats[24]+1
 
+    if "already_rerun" not in st.session_state:
+        st.session_state["already_rerun"] = False
     if not st.session_state["already_rerun"]:
-        st.session_state["already_rerun"] = True 
+        st.session_state["already_rerun"] = True
         st.rerun()
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-        
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
+
     tab2, tab1, tab3 = st.tabs(['メニュー', 'データ入力', 'データ一覧'])
     with tab3:
         _display_rows = 150
@@ -646,10 +617,14 @@ def main_page(list):
                     if st.button('Tag'):
                         st.session_state[ '現在時刻' ] = datetime.now().strftime( '%H:%M:%S' )
                         現在時刻 = datetime.now().strftime( '%H:%M:%S' )
-                        if st.session_state[ '開始時刻' ] in ['', 0]:
+                        _k_tag = st.session_state.get('開始時刻')
+                        if not isinstance(_k_tag, str) or _k_tag in ['', '0']:
                             st.session_state[ '経過時間' ] = '0:00'
                         else:
-                            st.session_state[ '経過時間' ] = datetime.strptime( st.session_state[ '現在時刻' ], '%H:%M:%S' ) - datetime.strptime( st.session_state[ '開始時刻' ], '%H:%M:%S' )
+                            try:
+                                st.session_state[ '経過時間' ] = datetime.strptime( 現在時刻, '%H:%M:%S' ) - datetime.strptime( _k_tag, '%H:%M:%S' )
+                            except ValueError:
+                                st.session_state[ '経過時間' ] = '0:00'
                         st.success(st.session_state[ '経過時間' ])
                         
                     st.write(f'{コースX}-{コースY}')
@@ -1286,8 +1261,25 @@ def main_page(list):
                         """
                         st.markdown(button_css, unsafe_allow_html=True)
                         if st.button('.　　　確定　　　.', key='confirm_button'):
+                            # 開始時刻の形式チェック
+                            _kaishi = st.session_state.get('開始時刻', 0)
+                            _time_valid = False
+                            if isinstance(_kaishi, str) and _kaishi not in ['', '0']:
+                                try:
+                                    datetime.strptime(_kaishi, '%H:%M:%S')
+                                    _time_valid = True
+                                except ValueError:
+                                    pass
+                            if not _time_valid:
+                                st.markdown(
+                                    '<div style="background:#ff4b4b;color:white;padding:20px;border-radius:10px;'
+                                    'text-align:center;font-size:24px;font-weight:bold;margin:10px 0;">'
+                                    '開始時刻が設定されていません。<br>メニュータブの「試合開始」ボタンを押してください。'
+                                    '</div>',
+                                    unsafe_allow_html=True,
+                                )
                             # 試合未開始時はデータ入力を拒否
-                            if st.session_state.get('current_game_id') is None:
+                            elif st.session_state.get('current_game_id') is None:
                                 st.error('試合が開始されていません。ホームで「試合開始」を押し、スタメン・試合情報を入力して確定してから、データ入力をおこなってください。')
                             elif 打撃結果 == 'エラー' and エラー選手 == 0 and プレイの種類 == '投球':
                                 st.warning('エラー選手が未入力')
@@ -1341,11 +1333,14 @@ def main_page(list):
                                     st.session_state['cached_all_list_len'] = -1
                                 
                                 st.session_state[ '現在時刻' ] = datetime.now().strftime( '%H:%M:%S' )
-                                print(開始時刻)
-                                if 開始時刻 in ['']:
+                                _k = st.session_state.get('開始時刻')
+                                if not isinstance(_k, str) or _k in ['', '0']:
                                     st.session_state[ '経過時間' ] = '0:00'
                                 else:
-                                    st.session_state[ '経過時間' ] = datetime.strptime( st.session_state[ '現在時刻' ], '%H:%M:%S' ) - datetime.strptime( st.session_state[ '開始時刻' ], '%H:%M:%S' )
+                                    try:
+                                        st.session_state[ '経過時間' ] = datetime.strptime( st.session_state[ '現在時刻' ], '%H:%M:%S' ) - datetime.strptime( _k, '%H:%M:%S' )
+                                    except ValueError:
+                                        st.session_state[ '経過時間' ] = '0:00'
                                 
                                 
                                 

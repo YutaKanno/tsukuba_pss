@@ -31,6 +31,46 @@ def member_page( member_df, top_poses, top_names, top_nums, top_lrs, bottom_pose
 
     from db import player_repo as _player_repo
 
+    # 試合情報の入力（試合開始時のみ）
+    if st.session_state.game_start == "start":
+        _SEASON_OPTIONS = ["春季", "夏季", "秋季", "冬季"]
+        _KIND_OPTIONS = [
+            "全国大会", "関東大会", "リーグ戦", "準公式戦",
+            "Aオープン戦", "Bオープン戦", "Cオープン戦",
+            "A紅白戦", "B紅白戦", "C紅白戦",
+            "部内リーグ", "その他",
+        ]
+        _GAME_NUMBER_OPTIONS = [0, 1, 2, 3, 4]
+        _WEEK_OPTIONS = list(range(0, 13))
+        _DAY_OPTIONS = [0, 1, 2, 3, 4]
+
+        default_date = (st.session_state.get("temp_list") or [None])[0] or ""
+        if "game_試合日時" not in st.session_state:
+            st.session_state.game_試合日時 = default_date
+        if "game_主審" not in st.session_state:
+            st.session_state.game_主審 = ""
+
+        with st.expander("試合情報", expanded=True):
+            c1, c2, c3, c4, c5, c6, c7 = st.columns(7)
+            with c1:
+                st.text_input("日時", value=st.session_state.game_試合日時, key="game_試合日時", placeholder="2025/03/15")
+            with c2:
+                st.text_input("主審", value=st.session_state.game_主審, key="game_主審")
+            with c3:
+                st.selectbox("Season", _SEASON_OPTIONS, key="game_Season")
+            with c4:
+                kind_sel = st.selectbox("Kind", _KIND_OPTIONS, key="game_Kind_sel")
+                if kind_sel == "その他":
+                    st.text_input("Kind入力", key="game_Kind")
+                else:
+                    st.session_state["game_Kind"] = kind_sel
+            with c5:
+                st.selectbox("Day", _DAY_OPTIONS, key="game_Day")
+            with c6:
+                st.selectbox("Week", _WEEK_OPTIONS, key="game_Week")
+            with c7:
+                st.selectbox("GN", _GAME_NUMBER_OPTIONS, key="game_GameNumber")
+
     with st.expander("選手を追加登録"):
         dup = st.session_state.get("member_add_duplicate")
         if dup:
@@ -256,37 +296,6 @@ def member_page( member_df, top_poses, top_names, top_nums, top_lrs, bottom_pose
                 if bottom_poses[i] == j+2:
                     bottom_names[j+10] = bottom_names[i]
 
-        # 試合開始時: gameテーブルに保存する試合情報の入力
-        if st.session_state.game_start == "start":
-            default_date = (st.session_state.get("temp_list") or [None])[0] or ""
-            if "game_試合日時" not in st.session_state:
-                st.session_state.game_試合日時 = default_date
-            if "game_主審" not in st.session_state:
-                st.session_state.game_主審 = ""
-            if "game_Season" not in st.session_state:
-                st.session_state.game_Season = ""
-            if "game_Kind" not in st.session_state:
-                st.session_state.game_Kind = ""
-            if "game_Week" not in st.session_state:
-                st.session_state.game_Week = ""
-            if "game_Day" not in st.session_state:
-                st.session_state.game_Day = ""
-            if "game_GameNumber" not in st.session_state:
-                st.session_state.game_GameNumber = ""
-            with st.expander("試合情報（gameテーブルに保存・必須）", expanded=True):
-                st.caption("試合開始前に以下を入力してください。")
-                st.text_input("試合日時（必須）", value=st.session_state.game_試合日時, key="game_試合日時", placeholder="例: 2025/03/15")
-                st.text_input("主審", value=st.session_state.game_主審, key="game_主審")
-                c1, c2, c3 = st.columns(3)
-                with c1:
-                    st.text_input("Season", value=st.session_state.game_Season, key="game_Season")
-                    st.text_input("Week", value=st.session_state.game_Week, key="game_Week")
-                with c2:
-                    st.text_input("Kind", value=st.session_state.game_Kind, key="game_Kind")
-                    st.text_input("Day", value=st.session_state.game_Day, key="game_Day")
-                with c3:
-                    st.text_input("GameNumber", value=st.session_state.game_GameNumber, key="game_GameNumber")
-
         if st.button("確定", key="member_confirm_btn"):
             from db import game_repo, player_repo
             # 確定押下時点のフォーム値を session_state から必ず取得して stamem に保存
@@ -358,12 +367,12 @@ def member_page( member_df, top_poses, top_names, top_nums, top_lrs, bottom_pose
                         試合日時,
                         st.session_state.top_team,
                         st.session_state.bottom_team,
-                        主審=st.session_state.get("game_主審") or "",
-                        Season=st.session_state.get("game_Season") or "",
-                        Kind=st.session_state.get("game_Kind") or "",
-                        Week=st.session_state.get("game_Week") or "",
-                        Day=st.session_state.get("game_Day") or "",
-                        GameNumber=st.session_state.get("game_GameNumber") or "",
+                        主審=str(st.session_state.get("game_主審") or ""),
+                        Season=str(st.session_state.get("game_Season") or ""),
+                        Kind=str(st.session_state.get("game_Kind") or ""),
+                        Week=str(st.session_state.get("game_Week") or ""),
+                        Day=str(st.session_state.get("game_Day") or ""),
+                        GameNumber=str(st.session_state.get("game_GameNumber") or ""),
                     )
                     st.session_state["current_game_id"] = gid
                     st.session_state["all_list"] = []
