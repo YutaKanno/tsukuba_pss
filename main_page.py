@@ -1004,11 +1004,11 @@ def main_page(list):
                             r3_state = '本進'
                     elif st.session_state.get('打撃結果') in ['四球', '死球']:
                         r0_state = '出塁'
-                        if r1_state not in ['0', 0]:
+                        if 一走氏名 not in ['0', 0]:
                             r1_state = '二進'
-                            if r2_state not in ['0', 0]:
+                            if 二走氏名 not in ['0', 0]:
                                 r2_state = '三進'
-                                if r3_state not in ['0', 0]:
+                                if 三走氏名 not in ['0', 0]:
                                     r3_state = '本進'
                             
                     elif st.session_state.get('打撃結果') == '犠飛':
@@ -1026,7 +1026,7 @@ def main_page(list):
                     elif st.session_state.get('打撃結果') == '三塁打':
                         r0_state = '三進'
                         if r1_state not in ['0', 0]:
-                            r1_state = '三進'
+                            r1_state = '本進'
                         if r2_state not in ['0', 0]:
                             r2_state = '本進'
                         if r3_state not in ['0', 0]:
@@ -1040,6 +1040,21 @@ def main_page(list):
                         if r3_state not in ['0', 0]:
                             r3_state = '本進'
                     
+                _prev_bat = st.session_state.get('_prev_batting_result', '0')
+                _prev_bat2 = st.session_state.get('_prev_batting_result2', '0')
+                _prev_pick = st.session_state.get('_prev_pickoff_detail', '0')
+                _curr_bat = st.session_state.get('打撃結果', '0')
+                _curr_bat2 = 打撃結果2
+                _curr_pick = 牽制詳細 if 牽制の種類 != '0' else '0'
+                if _curr_bat != _prev_bat or _curr_bat2 != _prev_bat2 or _curr_pick != _prev_pick:
+                    st.session_state['runner_0_state'] = r0_state
+                    st.session_state['runner_1_state'] = r1_state
+                    st.session_state['runner_2_state'] = r2_state
+                    st.session_state['runner_3_state'] = r3_state
+                    st.session_state['_prev_batting_result'] = _curr_bat
+                    st.session_state['_prev_batting_result2'] = _curr_bat2
+                    st.session_state['_prev_pickoff_detail'] = _curr_pick
+
                 if 打撃結果2 in ['PB', 'WP']:
                     if r1_state not in ['0', 0]:
                         r1_state = '二進'
@@ -1124,16 +1139,25 @@ def main_page(list):
                             error_player_0, error_player_1 = 0, 1
                             
                         エラー選手 = st.selectbox('エラー選手', [error_player_0, error_player_1, 2, 3, 4, 5, 6, 7, 8, 9], key='error_player')
-                        打者状況 = st.selectbox(f'{打順}:{打者氏名}', [r0_state , '継続', '二進', '三進', '本進', '封殺', '投手牽制死', '捕手牽制死'], key='runner_0_state')
+                        _r0_options = ['アウト', '出塁', '二進', '三進', '本進', '継続', '封殺', '投手牽制死', '捕手牽制死']
+                        if 'runner_0_state' not in st.session_state:
+                            st.session_state['runner_0_state'] = r0_state if r0_state in _r0_options else _r0_options[0]
+                        打者状況 = st.selectbox(f'{打順}:{打者氏名}', _r0_options, key='runner_0_state')
                         if 一走氏名 not in ['0', 0]:
-                            一走状況_options = [r1_state , '継続', '二進', '三進', '本進', '封殺', '投手牽制死', '捕手牽制死'] if r1_state not in ['0',0] else ['0']
-                            一走状況 = st.selectbox(f'1R:{一走氏名}', 一走状況_options, key='runner_1_state')
-                        if 二走氏名 not in ['0', 0]:    
-                            二走状況_options = [r2_state , '継続', '三進', '本進', '封殺', '投手牽制死', '捕手牽制死'] if r2_state not in ['0',0] else ['0']
-                            二走状況 = st.selectbox(f'2R:{二走氏名}', 二走状況_options, key='runner_2_state')
+                            _r1_options = ['継続', '二進', '三進', '本進', 'アウト', '封殺', '投手牽制死', '捕手牽制死'] if r1_state not in ['0', 0] else ['0']
+                            if 'runner_1_state' not in st.session_state:
+                                st.session_state['runner_1_state'] = r1_state if r1_state in _r1_options else _r1_options[0]
+                            一走状況 = st.selectbox(f'1R:{一走氏名}', _r1_options, key='runner_1_state')
+                        if 二走氏名 not in ['0', 0]:
+                            _r2_options = ['継続', '三進', '本進', 'アウト', '封殺', '投手牽制死', '捕手牽制死'] if r2_state not in ['0', 0] else ['0']
+                            if 'runner_2_state' not in st.session_state:
+                                st.session_state['runner_2_state'] = r2_state if r2_state in _r2_options else _r2_options[0]
+                            二走状況 = st.selectbox(f'2R:{二走氏名}', _r2_options, key='runner_2_state')
                         if 三走氏名 not in ['0', 0]:
-                            三走状況_options = [r3_state , '継続', '本進', '封殺', '投手牽制死', '捕手牽制死'] if r3_state not in ['0',0] else ['0']
-                            三走状況 = st.selectbox(f'3R{三走氏名}', 三走状況_options, key='runner_3_state')
+                            _r3_options = ['継続', '本進', 'アウト', '封殺', '投手牽制死', '捕手牽制死'] if r3_state not in ['0', 0] else ['0']
+                            if 'runner_3_state' not in st.session_state:
+                                st.session_state['runner_3_state'] = r3_state if r3_state in _r3_options else _r3_options[0]
+                            三走状況 = st.selectbox(f'3R{三走氏名}', _r3_options, key='runner_3_state')
 
                 hits = 0
                 打球強度 = 0
@@ -1393,6 +1417,13 @@ def main_page(list):
                                 
                                 st.session_state[ '打撃結果' ], st.session_state[ 'エラー選手' ], エラー選手 = '0', 0, 0 
                                 st.session_state.reset_flag = True
+                                st.session_state.pop('_prev_batting_result', None)
+                                st.session_state.pop('_prev_batting_result2', None)
+                                st.session_state.pop('_prev_pickoff_detail', None)
+                                st.session_state.pop('runner_0_state', None)
+                                st.session_state.pop('runner_1_state', None)
+                                st.session_state.pop('runner_2_state', None)
+                                st.session_state.pop('runner_3_state', None)
                                 r0_state, r1_state, r2_state, r3_state = '継続', updated_list[36], updated_list[37], updated_list[38]
                                 
                                 plate.clear_canvas()
@@ -1502,6 +1533,13 @@ def main_page(list):
                 # 状態更新
                 st.session_state[ 'data_list' ] = updated_list
                 st.session_state.reset_flag = True
+                st.session_state.pop('_prev_batting_result', None)
+                st.session_state.pop('_prev_batting_result2', None)
+                st.session_state.pop('_prev_pickoff_detail', None)
+                st.session_state.pop('runner_0_state', None)
+                st.session_state.pop('runner_1_state', None)
+                st.session_state.pop('runner_2_state', None)
+                st.session_state.pop('runner_3_state', None)
 
                 # キャンバスをクリアして再表示
                 plate.clear_canvas()
