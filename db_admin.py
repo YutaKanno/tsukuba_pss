@@ -11,9 +11,40 @@ from config import COLUMN_NAMES
 from db import game_repo, player_repo, schema
 
 
+def _get_admin_password() -> str:
+    """Return admin password from Secrets or env var (default: 'admin')."""
+    import os
+    try:
+        pw = st.secrets.get("DB_ADMIN_PASSWORD")
+        if pw:
+            return str(pw)
+    except Exception:
+        pass
+    return os.environ.get("DB_ADMIN_PASSWORD", "admin")
+
+
 def run() -> None:
     st.title("データベース確認・CSV保存")
-    st.caption("DBの内容を確認し、試合を選んで game_data.csv 形式でダウンロードできます。")
+
+    # ── パスワード認証 ──
+    if not st.session_state.get("db_admin_authenticated"):
+        st.caption("このページはパスワードが必要です。")
+        pw_input = st.text_input("パスワード", type="password", key="db_admin_pw_input")
+        if st.button("ログイン", key="db_admin_login_btn"):
+            if pw_input == _get_admin_password():
+                st.session_state["db_admin_authenticated"] = True
+                st.rerun()
+            else:
+                st.error("パスワードが正しくありません。")
+        return
+
+    col_title, col_logout = st.columns([8, 1])
+    with col_title:
+        st.caption("DBの内容を確認し、試合を選んで game_data.csv 形式でダウンロードできます。")
+    with col_logout:
+        if st.button("ログアウト", key="db_admin_logout_btn"):
+            st.session_state.pop("db_admin_authenticated", None)
+            st.rerun()
 
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         "チーム一覧", "選手一覧", "スタメン", "試合一覧", "試合をCSVで保存", "試合削除"
