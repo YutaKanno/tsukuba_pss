@@ -1662,23 +1662,63 @@ def main_page(list):
         st.divider()
 
         # ── 試合終了 ──
-        if st.button( "🏁 試合終了（スタートに戻る）", use_container_width = True ):
-            for k in [
-                'data_list', 'all_list', 'temp_list', 'current_game_id',
-                'top_team', 'bottom_team',
-                'top_poses', 'top_names', 'top_nums', 'top_lrs',
-                'bottom_poses', 'bottom_names', 'bottom_nums', 'bottom_lrs',
-                'top_score', 'bottom_score',
-                '開始時刻', '現在時刻', '経過時間',
-                'runner_0_state', 'runner_1_state', 'runner_2_state', 'runner_3_state',
-                '_prev_batting_result', '_prev_batting_result2', '_prev_pickoff_detail',
-                'last_confirmed_play_key', 'cached_all_list_len', 'already_rerun',
-                'reset_flag', 'radio_selection', 'pickoff_selection',
-            ]:
-                st.session_state.pop( k, None )
-            st.session_state.page_ctg = "start"
-            st.session_state.game_start = "continue"
-            st.rerun()
+        _END_RESET_KEYS = [
+            'data_list', 'all_list', 'temp_list', 'current_game_id',
+            'top_team', 'bottom_team',
+            'top_poses', 'top_names', 'top_nums', 'top_lrs',
+            'bottom_poses', 'bottom_names', 'bottom_nums', 'bottom_lrs',
+            'top_score', 'bottom_score',
+            '開始時刻', '現在時刻', '経過時間',
+            'runner_0_state', 'runner_1_state', 'runner_2_state', 'runner_3_state',
+            '_prev_batting_result', '_prev_batting_result2', '_prev_pickoff_detail',
+            'last_confirmed_play_key', 'cached_all_list_len', 'already_rerun',
+            'reset_flag', 'radio_selection', 'pickoff_selection',
+            '_game_end_sync_done', '_game_end_sync_result',
+        ]
+
+        if not st.session_state.get( '_game_end_sync_done' ):
+            if st.button( "🏁 試合終了（スタートに戻る）", use_container_width = True ):
+                # ── DB 登録漏れチェック & 補完 ──
+                gid      = st.session_state.get( 'current_game_id' )
+                mem_list = st.session_state.get( 'all_list', [] )
+                sync_result = { 'missing': 0, 'error': None }
+                if gid and mem_list:
+                    try:
+                        from db import game_repo as _gr
+                        db_plays    = _gr.get_play_list( gid )
+                        db_play_nums = { row[ 9 ] for row in db_plays if row[ 9 ] is not None }
+                        missing_rows = [ row for row in mem_list if row[ 9 ] not in db_play_nums ]
+                        for row in missing_rows:
+                            _gr.insert_play( gid, row )
+                        sync_result[ 'missing' ] = len( missing_rows )
+                    except Exception as _e:
+                        sync_result[ 'error' ] = str( _e )
+                st.session_state[ '_game_end_sync_result' ] = sync_result
+                st.session_state[ '_game_end_sync_done'   ] = True
+                st.rerun()
+        else:
+            _res = st.session_state.get( '_game_end_sync_result', {} )
+            if _res.get( 'error' ):
+                st.error( f"データ同期エラー: {_res['error']}" )
+                st.warning( "一部データが保存されていない可能性があります。それでも終了しますか？" )
+            elif _res.get( 'missing', 0 ) > 0:
+                st.success( f"✅ {_res['missing']} 件の未登録データをDBに保存しました" )
+            else:
+                st.success( "✅ すべてのデータはDBに登録済みです" )
+
+            _ec1, _ec2 = st.columns( 2 )
+            with _ec1:
+                if st.button( "スタートへ戻る", type = "primary", use_container_width = True ):
+                    for k in _END_RESET_KEYS:
+                        st.session_state.pop( k, None )
+                    st.session_state.page_ctg  = "start"
+                    st.session_state.game_start = "continue"
+                    st.rerun()
+            with _ec2:
+                if st.button( "キャンセル", use_container_width = True ):
+                    st.session_state.pop( '_game_end_sync_done',   None )
+                    st.session_state.pop( '_game_end_sync_result', None )
+                    st.rerun()
 
         return st.session_state[ 'data_list' ]
 
