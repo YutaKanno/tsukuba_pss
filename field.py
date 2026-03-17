@@ -1,12 +1,14 @@
 """
 Field image and click handling for hit position.
 """
+import base64
+import io
 import os
 import uuid
 
 import streamlit as st
+import plotly.graph_objects as go
 from PIL import Image, ImageDraw, ImageFont
-from streamlit_drawable_canvas import st_canvas
 
 
 @st.cache_resource
@@ -19,13 +21,10 @@ def load_bg_image():
 @st.cache_resource
 def load_fonts():
     try:
-        # パスが通っていない可能性があるので、os.path.joinを使うとより堅牢です
-        # しかし、ipaexg.ttf が Streamlit アプリのどこに置かれているかによる
         font_path = os.path.join( os.path.dirname( __file__ ), 'fonts', 'ipaexg.ttf' )
         font = ImageFont.truetype( font_path, 13 )
         font2 = ImageFont.truetype( font_path, 27 )
     except:
-        # フォントが見つからない場合のフォールバック
         font = ImageFont.load_default()
         font2 = ImageFont.load_default()
     return font, font2
@@ -35,120 +34,121 @@ def clear_canvas() -> None:
     """Reset field click state."""
     if 'image_clicker_unique_key' not in st.session_state:
         st.session_state.image_clicker_unique_key = str( uuid.uuid4() )
-
     st.session_state.latest_point = None
     st.session_state.image_clicker_unique_key = str( uuid.uuid4() )
-    # 画面を再実行して変更を反映
     st.rerun()
 
-def field( player_list, r_state ):
-    # --- session_state の初期化 ---
-    if 'image_clicker_unique_key' not in st.session_state:
-        st.session_state.image_clicker_unique_key = str(uuid.uuid4())
 
+def field( player_list, r_state ):
+    if 'image_clicker_unique_key' not in st.session_state:
+        st.session_state.image_clicker_unique_key = str( uuid.uuid4() )
     if 'latest_point' not in st.session_state:
         st.session_state.latest_point = { 'x': 0, 'y': 0 }
-
     if 'latest_clicked_point' not in st.session_state:
         st.session_state.latest_clicked_point = { 'x': 0, 'y': 0 }
-
     if 'image_key_counter' not in st.session_state:
         st.session_state.image_key_counter = 0
 
-    # x, y は現在の座標表示のため、初期値は0,0で良い
-    x, y = 0, 0
-    # canvas_key は streamlit_drawable_canvas 用なので、今回は直接関係ありません
-
-    # 背景画像の読み込み (cache_resourceを使うので、毎回ロードするわけではない)
-    bg_image = load_bg_image().copy() # キャッシュ画像を直接変更しないようにコピー
-
-    # フォントの読み込み (cache_resourceを使う)
+    bg_image = load_bg_image().copy()
     font, font2 = load_fonts()
+    draw = ImageDraw.Draw( bg_image )
 
-    # 背景にテキスト・記号を描画
-    draw = ImageDraw.Draw(bg_image)
     # プレイヤー名の描画
-    draw.text((230, 215), player_list[12], font=font, fill='black') #2B
-    draw.text((130, 215), player_list[14], font=font, fill='black') #SS
-    draw.text((250, 265), player_list[11], font=font, fill='black') #1B
-    draw.text((100, 265), player_list[13], font=font, fill='black') #3B
-    draw.text((185, 365), player_list[10], font=font, fill='black') #C
-    draw.text((185, 105), player_list[16], font=font, fill='black') #CF
-    draw.text((90, 155), player_list[15], font=font, fill='black') #LF
-    draw.text((260, 155), player_list[17], font=font, fill='black') #RF
+    draw.text( ( 230, 215 ), player_list[12], font=font, fill='black' )
+    draw.text( ( 130, 215 ), player_list[14], font=font, fill='black' )
+    draw.text( ( 250, 265 ), player_list[11], font=font, fill='black' )
+    draw.text( ( 100, 265 ), player_list[13], font=font, fill='black' )
+    draw.text( ( 185, 365 ), player_list[10], font=font, fill='black' )
+    draw.text( ( 185, 105 ), player_list[16], font=font, fill='black' )
+    draw.text( ( 90, 155 ),  player_list[15], font=font, fill='black' )
+    draw.text( ( 260, 155 ), player_list[17], font=font, fill='black' )
 
     # ランナーの状態描画
-    if r_state[0] == 1: # 1塁
-        draw.text((260, 275), '◇', font=font2, fill='red')
-    if r_state[2] == 1: # 3塁
-        draw.text((130, 275), '◇', font=font2, fill='red')
-    if r_state[1] == 1: # 2塁
-        draw.text((193, 211), '◇', font=font2, fill='red')
-            
-    # プロット点の半径
-    r = 5
+    if r_state[0] == 1:
+        draw.text( ( 260, 275 ), '◇', font=font2, fill='red' )
+    if r_state[2] == 1:
+        draw.text( ( 130, 275 ), '◇', font=font2, fill='red' )
+    if r_state[1] == 1:
+        draw.text( ( 193, 211 ), '◇', font=font2, fill='red' )
 
-    # 最新のクリック点がある場合のみ描画
+    # 最新のクリック点を描画
+    r = 5
     point2 = st.session_state.latest_point
     if point2 and 'x' in point2 and 'y' in point2:
         draw.ellipse(
-            (
-                point2['x'] - r,
-                point2['y'] - r,
-                point2['x'] + r,
-                point2['y'] + r
-            ),
+            ( point2['x'] - r, point2['y'] - r, point2['x'] + r, point2['y'] + r ),
             fill="black"
         )
 
-    # 座標取得 (drawable_canvas で代替)
-    canvas_result = st_canvas(
-        background_image=bg_image,
-        drawing_mode="point",
-        point_display_radius=0,
-        fill_color="rgba(0,0,0,0)",
-        stroke_color="rgba(0,0,0,0)",
-        stroke_width=0,
-        width=bg_image.width,
-        height=bg_image.height,
-        key=st.session_state.image_clicker_unique_key,
-        display_toolbar=False,
+    w, h = bg_image.width, bg_image.height
+
+    # PIL画像 → base64
+    buf = io.BytesIO()
+    bg_image.save( buf, format='PNG' )
+    img_b64 = 'data:image/png;base64,' + base64.b64encode( buf.getvalue() ).decode()
+
+    # クリック検出用の透明散布点グリッド（5px刻み）
+    step = 5
+    all_x, all_y = [], []
+    for py in range( 0, h + step, step ):
+        for px in range( 0, w + step, step ):
+            all_x.append( px )
+            all_y.append( py )
+
+    fig = go.Figure()
+
+    # 背景画像（y軸反転で上端y=0）
+    fig.add_layout_image(
+        source=img_b64,
+        xref="x", yref="y",
+        x=0, y=0,
+        sizex=w, sizey=h,
+        xanchor="left", yanchor="top",
+        sizing="stretch",
+        opacity=1,
+        layer="below",
     )
 
-    coords = None
-    if canvas_result.json_data is not None:
-        objects = canvas_result.json_data.get("objects", [])
-        if objects:
-            last_obj = objects[-1]
-            coords = {"x": int(last_obj["left"]), "y": int(last_obj["top"])}
+    # クリック検出用の透明散布点
+    fig.add_trace( go.Scatter(
+        x=all_x, y=all_y,
+        mode='markers',
+        marker=dict( opacity=0, size=8 ),
+        showlegend=False,
+        hoverinfo='skip',
+    ) )
 
-    # 新しいクリックがあれば更新して再描画
-    if coords and coords != st.session_state.latest_point:
-        st.session_state.latest_point = coords
-        st.rerun()
+    fig.update_layout(
+        width=w, height=h,
+        margin=dict( l=0, r=0, t=0, b=0 ),
+        xaxis=dict( range=[ 0, w ], showticklabels=False, showgrid=False, zeroline=False, fixedrange=True ),
+        yaxis=dict( range=[ h, 0 ], showticklabels=False, showgrid=False, zeroline=False, fixedrange=True ),
+        dragmode='select',
+        clickmode='event+select',
+    )
 
-    # 現在のクリック位置を 263スケールに換算して返す
+    event_data = st.plotly_chart(
+        fig,
+        on_select="rerun",
+        key=st.session_state.image_clicker_unique_key,
+        config={ "displayModeBar": False },
+        use_container_width=False,
+    )
+
+    if event_data and "selection" in event_data:
+        pts = event_data["selection"].get( "points", [] )
+        if pts:
+            cx = int( pts[0].get( "x", 0 ) )
+            cy = int( pts[0].get( "y", 0 ) )
+            coords = { "x": cx, "y": cy }
+            if coords != st.session_state.latest_point:
+                st.session_state.latest_point = coords
+                st.rerun()
+
     point2 = st.session_state.latest_point
     if point2 and 'x' in point2 and 'y' in point2:
-        # 画像サイズ 400x400 を基準に 263スケールに換算
-        x = 263 * point2['x'] / bg_image.width
-        y = 263 * point2['y'] / bg_image.height
+        x = 263 * point2['x'] / w
+        y = 263 * point2['y'] / h
         return x, y
     else:
-        # プロットがない場合は0,0を返す
         return 0, 0
-
-# --- (main.py または main_page.py から呼び出す部分) ---
-# field 関数が呼び出されるファイル (例: main_page.py) で
-# クリアボタンを配置する場合の例
-
-# st.button("プロットをクリア") の設置例 (main_page.py などに記述)
-# if st.button("プロットをクリア"):
-#     clear_canvas() # clear_canvas 関数を呼び出す
-
-# field 関数からの戻り値の表示例
-# 打球位置X, 打球位置Y = field(bottom_names, r_state)
-# if 打球位置X == 0 and 打球位置Y == 0:
-#     st.write("x=0, y=0 (プロットなし)")
-# else:
-#     st.write(f"x={打球位置X:.2f}, y={打球位置Y:.2f}")
