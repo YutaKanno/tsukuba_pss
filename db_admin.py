@@ -2,6 +2,7 @@
 DB inspection and CSV export page.
 """
 import io
+import zipfile
 
 import pandas as pd
 import streamlit as st
@@ -93,32 +94,74 @@ def run() -> None:
         if not games:
             st.info("試合がまだありません。試合を開始してデータを入力すると保存できます。")
         else:
-            options = [f"{r[1]} {r[2]} {r[3]} {r[4]} vs {r[5]}" for r in games]
-            idx = st.selectbox(
-                "CSVにしたい試合を選択",
-                range(len(options)),
-                format_func=lambda i: options[i],
-                key="db_admin_csv_game"
+            options_csv = [f"{r[1]} {r[2]} {r[3]} {r[4]} vs {r[5]}" for r in games]
+
+            c_all_csv, c_none_csv = st.columns(2)
+            with c_all_csv:
+                if st.button("全選択", key="csv_select_all"):
+                    st.session_state["csv_selected"] = list(range(len(games)))
+            with c_none_csv:
+                if st.button("全解除", key="csv_select_none"):
+                    st.session_state["csv_selected"] = []
+
+            selected_csv = st.multiselect(
+                "CSVにしたい試合を選択（複数可）",
+                options=list(range(len(games))),
+                default=st.session_state.get("csv_selected", []),
+                format_func=lambda i: options_csv[i],
+                key="db_admin_csv_games",
             )
-            if idx is not None:
-                gid = games[idx][0]
-                play_list = game_repo.get_play_list(gid)
-                if not play_list:
-                    st.warning("この試合にはまだ1球もデータがありません。")
+            st.session_state["csv_selected"] = selected_csv
+
+            if selected_csv:
+                st.caption(f"{len(selected_csv)} 試合を選択中")
+                if len(selected_csv) == 1:
+                    # 1試合 → 単一CSV
+                    idx = selected_csv[0]
+                    gid = games[idx][0]
+                    play_list = game_repo.get_play_list(gid)
+                    if not play_list:
+                        st.warning("この試合にはまだ1球もデータがありません。")
+                    else:
+                        df = pd.DataFrame(play_list, columns=COLUMN_NAMES)
+                        buf = io.BytesIO(df.to_csv(index=False).encode("utf-8-sig"))
+                        file_name = f"game_data_{gid}_{games[idx][1].replace('/', '-')}.csv"
+                        st.download_button(
+                            label="CSVでダウンロード",
+                            data=buf,
+                            file_name=file_name,
+                            mime="text/csv",
+                            key="db_admin_dl_btn_single",
+                        )
+                        st.caption(f"プレイ数: {len(play_list)} 件")
                 else:
-                    df = pd.DataFrame(play_list, columns=COLUMN_NAMES)
-                    csv_str = df.to_csv(index=False)
-                    csv_bytes = csv_str.encode("utf-8-sig")
-                    buf = io.BytesIO(csv_bytes)
-                    file_name = f"game_data_{gid}_{games[idx][1].replace('/', '-')}.csv"
+                    # 複数試合 → ZIP
+                    zip_buf = io.BytesIO()
+                    total_plays = 0
+                    empty_games = []
+                    with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
+                        for idx in selected_csv:
+                            gid = games[idx][0]
+                            play_list = game_repo.get_play_list(gid)
+                            if not play_list:
+                                empty_games.append(options_csv[idx])
+                                continue
+                            df = pd.DataFrame(play_list, columns=COLUMN_NAMES)
+                            csv_bytes = df.to_csv(index=False).encode("utf-8-sig")
+                            fname = f"game_data_{gid}_{games[idx][1].replace('/', '-')}.csv"
+                            zf.writestr(fname, csv_bytes)
+                            total_plays += len(play_list)
+                    zip_buf.seek(0)
+                    if empty_games:
+                        st.warning(f"以下の試合はデータが0件のためZIPに含まれません:\n" + "\n".join(f"- {g}" for g in empty_games))
                     st.download_button(
-                        label="この試合をCSVでダウンロード",
-                        data=buf,
-                        file_name=file_name,
-                        mime="text/csv",
-                        key="db_admin_dl_btn"
+                        label=f"選択した {len(selected_csv)} 試合をZIPでダウンロード",
+                        data=zip_buf,
+                        file_name="game_data_bulk.zip",
+                        mime="application/zip",
+                        key="db_admin_dl_btn_zip",
                     )
-                    st.caption(f"プレイ数: {len(play_list)} 件")
+                    st.caption(f"合計プレイ数: {total_plays} 件")
 
     with tab6:
         st.subheader("試合削除")
@@ -126,25 +169,45 @@ def run() -> None:
         if not games:
             st.info("削除できる試合がまだありません。")
         else:
-            options = [f"{r[1]} {r[2]} {r[3]} {r[4]} vs {r[5]}" for r in games]
-            idx = st.selectbox(
-                "削除したい試合を選択",
-                range(len(options)),
-                format_func=lambda i: options[i],
-                key="db_admin_del_game"
+            options_del = [f"{r[1]} {r[2]} {r[3]} {r[4]} vs {r[5]}" for r in games]
+
+            c_all_del, c_none_del = st.columns(2)
+            with c_all_del:
+                if st.button("全選択", key="del_select_all"):
+                    st.session_state["del_selected"] = list(range(len(games)))
+            with c_none_del:
+                if st.button("全解除", key="del_select_none"):
+                    st.session_state["del_selected"] = []
+
+            selected_del = st.multiselect(
+                "削除したい試合を選択（複数可）",
+                options=list(range(len(games))),
+                default=st.session_state.get("del_selected", []),
+                format_func=lambda i: options_del[i],
+                key="db_admin_del_games",
             )
-            if idx is not None:
-                gid = games[idx][0]
-                st.warning("この試合と紐づく全ての毎球データが完全に削除されます。元に戻すことはできません。")
+            st.session_state["del_selected"] = selected_del
+
+            if selected_del:
+                st.caption(f"{len(selected_del)} 試合を選択中")
+                st.warning(
+                    f"選択した **{len(selected_del)} 試合** と紐づく全ての毎球データが完全に削除されます。"
+                    "元に戻すことはできません。"
+                )
                 col_del1, col_del2 = st.columns(2)
                 with col_del1:
-                    if st.button("本当に削除する", key="db_admin_del_confirm"):
-                        game_repo.delete_game(gid)
-                        st.success("選択した試合を削除しました。")
+                    if st.button(f"本当に {len(selected_del)} 試合を削除する", key="db_admin_del_confirm", type="primary"):
+                        deleted = 0
+                        for idx in selected_del:
+                            game_repo.delete_game(games[idx][0])
+                            deleted += 1
+                        st.session_state.pop("del_selected", None)
+                        st.success(f"{deleted} 試合を削除しました。")
                         st.rerun()
                 with col_del2:
                     if st.button("キャンセル", key="db_admin_del_cancel"):
-                        st.info("削除をキャンセルしました。")
+                        st.session_state.pop("del_selected", None)
+                        st.rerun()
 
     st.write("---")
     if st.button("スタート画面に戻る"):
