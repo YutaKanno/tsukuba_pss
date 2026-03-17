@@ -350,26 +350,18 @@ def main_page(list):
     
     r0_state, r1_state, r2_state, r3_state = '継続' ,current_list[36], current_list[37], current_list[38]
     
-    if S == 0:
-        s_count = '〇〇'
-    elif S == 1:
-        s_count = '●〇'
-    elif S == 2:
-        s_count = '●●'
-    if B == 0:
-        b_count = '〇〇〇'
-    elif B == 1:
-        b_count = '●〇〇'
-    elif B == 2:
-        b_count = '●●〇'
-    elif B == 3:
-        b_count = '●●●'
-    if アウト == 0:
-        o_count = '〇〇'
-    elif アウト == 1:
-        o_count = '●〇'
-    elif アウト == 2:
-        o_count = '●●'
+    def _dot_html(filled: int, total: int, color: str) -> str:
+        dots = []
+        for i in range(total):
+            if i < filled:
+                dots.append(f'<span style="display:inline-block;width:13px;height:13px;border-radius:50%;background-color:{color};margin:1px;vertical-align:middle;"></span>')
+            else:
+                dots.append(f'<span style="display:inline-block;width:13px;height:13px;border-radius:50%;border:2px solid {color};margin:1px;vertical-align:middle;box-sizing:border-box;"></span>')
+        return ''.join(dots)
+
+    s_count = _dot_html(S, 2, '#FFCC33')
+    b_count = _dot_html(B, 3, '#4CAF50')
+    o_count = _dot_html(アウト, 2, '#FF6666')
         
     
     
@@ -515,6 +507,8 @@ def main_page(list):
                     }}
                     .circle {{
                         text-align: left;
+                        vertical-align: middle;
+                        white-space: nowrap;
                     }}
                     .green {{ color: #b6e3b6; }}
                     .red {{ color: #FF6666; }}
