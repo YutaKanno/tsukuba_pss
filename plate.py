@@ -70,11 +70,26 @@ def plate(打席左右: str) -> Tuple[float, float]:
             fill = "black"
         )
 
-    # 座標取得
-    coords = streamlit_image_coordinates(
-        image_for_display,
-        key = f"image_clicker_{st.session_state.image_clicker_key_counter}"
+    # 座標取得 (drawable_canvas で代替)
+    canvas_result = st_canvas(
+        background_image=image_for_display,
+        drawing_mode="point",
+        point_display_radius=0,
+        fill_color="rgba(0,0,0,0)",
+        stroke_color="rgba(0,0,0,0)",
+        stroke_width=0,
+        width=image_for_display.width,
+        height=image_for_display.height,
+        key=f"image_clicker_{st.session_state.image_clicker_key_counter}",
+        display_toolbar=False,
     )
+
+    coords = None
+    if canvas_result.json_data is not None:
+        objects = canvas_result.json_data.get("objects", [])
+        if objects:
+            last_obj = objects[-1]
+            coords = {"x": int(last_obj["left"]), "y": int(last_obj["top"])}
 
     # 新しいクリックがあれば更新して再描画
     if coords and coords != st.session_state.latest_clicked_point:

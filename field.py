@@ -101,17 +101,31 @@ def field( player_list, r_state ):
             fill="black"
         )
 
-    # 座標取得 (一意なキーを使用)
-    coords = streamlit_image_coordinates(
-        bg_image,
-        key = st.session_state.image_clicker_unique_key # ここでユニークなキーを使用
+    # 座標取得 (drawable_canvas で代替)
+    canvas_result = st_canvas(
+        background_image=bg_image,
+        drawing_mode="point",
+        point_display_radius=0,
+        fill_color="rgba(0,0,0,0)",
+        stroke_color="rgba(0,0,0,0)",
+        stroke_width=0,
+        width=bg_image.width,
+        height=bg_image.height,
+        key=st.session_state.image_clicker_unique_key,
+        display_toolbar=False,
     )
 
+    coords = None
+    if canvas_result.json_data is not None:
+        objects = canvas_result.json_data.get("objects", [])
+        if objects:
+            last_obj = objects[-1]
+            coords = {"x": int(last_obj["left"]), "y": int(last_obj["top"])}
+
     # 新しいクリックがあれば更新して再描画
-    # 前回のクリックと同じ座標でなければ処理（無限ループ防止）
     if coords and coords != st.session_state.latest_point:
         st.session_state.latest_point = coords
-        st.rerun() # 画面を更新して新しいプロットを表示
+        st.rerun()
 
     # 現在のクリック位置を 263スケールに換算して返す
     point2 = st.session_state.latest_point
