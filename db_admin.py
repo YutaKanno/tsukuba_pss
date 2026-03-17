@@ -25,7 +25,7 @@ def run() -> None:
             st.info("チームがまだ登録されていません。")
         else:
             df_team = pd.DataFrame(teams, columns=["id", "名前"])
-            st.dataframe(df_team, width="stretch")
+            st.dataframe(df_team, use_container_width=True)
             st.caption(f"計 {len(teams)} チーム")
 
     with tab2:
@@ -44,7 +44,7 @@ def run() -> None:
                         st.info("このチームに選手登録がありません。")
                     else:
                         df = pd.DataFrame(rows, columns=["背番号", "名前", "左右"])
-                        st.dataframe(df, width="stretch")
+                        st.dataframe(df, use_container_width=True)
                         st.caption(f"計 {len(rows)} 名")
 
     with tab3:
@@ -70,7 +70,7 @@ def run() -> None:
                         for i in range(n)
                     ]
                     if table_data:
-                        st.dataframe(pd.DataFrame(table_data), width="stretch")
+                        st.dataframe(pd.DataFrame(table_data), use_container_width=True)
                     else:
                         st.caption("スタメンデータが空です。")
 
@@ -84,7 +84,7 @@ def run() -> None:
                 games,
                 columns=["id", "試合日時", "Season", "Kind", "先攻", "後攻"]
             )
-            st.dataframe(df_games, width="stretch")
+            st.dataframe(df_games, use_container_width=True)
             st.caption(f"直近 {len(games)} 試合（新しい順）")
 
     with tab5:

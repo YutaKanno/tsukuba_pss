@@ -40,11 +40,8 @@ def ensure_db() -> None:
 
 
 def load_member_df_from_db() -> Optional[pd.DataFrame]:
-    """Build member_df from team/player tables in DB."""
-    rows = []
-    for tid, tname in player_repo.list_teams():
-        for 背番号, 名前, 左右 in player_repo.get_players_by_team( tid ):
-            rows.append( { "大学名": tname, "背番号": 背番号, "名前": 名前, "左右": 左右 } )
+    """Build member_df from team/player tables in DB (single JOIN query)."""
+    rows = player_repo.get_all_players_with_team()
     return pd.DataFrame( rows ) if rows else None
 
 
@@ -73,69 +70,217 @@ member_df = st.session_state["member_df"]
 
 # --- ページルーティング ---
 if st.session_state.page_ctg == "start":
-    # CSS でボタンを装飾
-    st.markdown("""
-    <style>
-    .button-container {
-        display: flex;
-        gap: 1rem;
-        justify-content: center;
-        margin-top: 2rem;
-    }
-    .stButton > button {
-        background-color: #4CAF50;
-        color: white;
-        padding: 0.75rem 1.5rem;
-        font-size: 1.1rem;
-        border: none;
-        border-radius: 8px;
-        cursor: pointer;
-        transition: 0.3s;
-    }
-    .stButton > button:hover {
-        background-color: #45a049;
-    }
-    </style>
-    """, unsafe_allow_html=True)
+    # ── 接続状態インジケータ ──
+    if schema.is_postgres():
+        st.success( "🌐 Supabase (PostgreSQL) に接続中" )
+    else:
+        st.warning( "⚠️ ローカル SQLite を使用中（Supabase に接続されていません）" )
 
-    # ボタンを横並びで表示
-    st.markdown('<div class="button-container">', unsafe_allow_html=True)
-    
-    col1, col2, col3, _ = st.columns([1, 1, 1, 3])
+    st.divider()
+
+    # ── メインアクション ──
+    has_teams = bool( player_repo.list_teams() )
+    has_games = bool( game_repo.list_games() )
+
+    col1, col2, col3 = st.columns( 3 )
     with col1:
-        has_teams = bool(player_repo.list_teams())
-        if st.button("▶️ 試合開始", disabled=not has_teams):
+        st.markdown( "#### ▶️ 試合開始" )
+        st.caption( "チーム・メンバーを設定して試合を記録します" )
+        if st.button( "試合開始", disabled = not has_teams, use_container_width = True, type = "primary" ):
             st.session_state.page_ctg = "member"
             st.session_state.game_start = "start"
             st.rerun()
+        if not has_teams:
+            st.caption( "※ 先にチーム・選手登録が必要です" )
     with col2:
-        has_games = bool(game_repo.list_games())
-        if st.button("📝 入力再開", disabled=not has_games):
+        st.markdown( "#### 📝 入力再開" )
+        st.caption( "中断した試合の記録を続けます" )
+        if st.button( "入力再開", disabled = not has_games, use_container_width = True ):
             st.session_state["pending_game_select"] = True
             st.rerun()
     with col3:
-        if st.button("🗄️ データベース確認・CSV保存"):
+        st.markdown( "#### 🗄️ データ確認" )
+        st.caption( "記録データの確認・CSV保存を行います" )
+        if st.button( "データベース確認・CSV保存", use_container_width = True ):
             st.session_state.page_ctg = "db_admin"
             st.rerun()
 
-    if st.session_state.get("pending_game_select"):
+    if st.session_state.get( "pending_game_select" ):
         games = game_repo.list_games()
         if games:
-            st.caption("試合を選んで「この試合を再開」を押すと、最後の入力行から再開できます。")
-            opts = [f"{r[1]} {r[2]} {r[3]} {r[4]} vs {r[5]}" for r in games]
-            idx = st.selectbox("続きを行う試合を選択", range(len(opts)), format_func=lambda i: opts[i])
-            if st.button("この試合を再開"):
-                gid = games[idx][0]
-                st.session_state["all_list"] = game_repo.get_play_list(gid)
-                st.session_state["current_game_id"] = gid
+            st.divider()
+            st.caption( "試合を選んで「この試合を再開」を押すと、最後の入力行から再開できます。" )
+            opts = [ f"{r[1]} {r[2]} {r[3]} {r[4]} vs {r[5]}" for r in games ]
+            idx = st.selectbox( "続きを行う試合を選択", range( len( opts ) ), format_func = lambda i: opts[ i ] )
+            if st.button( "この試合を再開", type = "primary" ):
+                gid = games[ idx ][ 0 ]
+                st.session_state[ "all_list" ] = game_repo.get_play_list( gid )
+                st.session_state[ "current_game_id" ] = gid
                 st.session_state.page_ctg = "main"
                 st.session_state.game_start = "continue"
                 if "temp_list" in st.session_state:
-                    del st.session_state["temp_list"]
-                del st.session_state["pending_game_select"]
+                    del st.session_state[ "temp_list" ]
+                del st.session_state[ "pending_game_select" ]
                 st.rerun()
         else:
-            st.session_state["pending_game_select"] = False
+            st.session_state[ "pending_game_select" ] = False
+
+    st.divider()
+
+    # ── 使い方ガイド ──
+    with st.expander( "📖 使い方ガイド（クリックで展開）", expanded = False ):
+        g_tab1, g_tab2, g_tab3, g_tab4 = st.tabs( [ "🔰 基本操作", "📋 入力データ一覧", "⚙️ メニュー機能", "💾 データ出力" ] )
+
+        with g_tab1:
+            st.markdown( """
+#### 初回セットアップ
+1. 「チーム・選手登録」でチーム名を登録（例：筑波大学）
+2. チームごとに選手を登録（背番号・氏名・投打の左右）
+3. 9人以上登録すると「試合開始」ボタンが有効になります
+
+#### 試合開始の手順
+1. **「試合開始」**ボタンを押す → 試合情報入力画面へ
+2. 試合情報（日時・シーズン・大会種別など）を入力
+3. 先攻・後攻チームを選択してスタメンを入力
+4. 「確定」でデータ入力画面へ移動
+5. 画面上部の **メニュータブ** を開き **「▶ 試合開始（開始時刻を記録）」を必ず押す**
+   - ⚠️ これを押さないと経過時間が記録されません
+
+#### データ入力の1球の流れ
+```
+① 構え（打者の立ち位置）を選択
+   └ コースマップをクリックして投球コースを入力（✔が表示されたら入力済み）
+
+② 球種を選択
+   FB=ストレート / CB=カーブ / SL=スライダー / CT=カット /
+   ST=シンカー / 2S=ツーシーム / CH=チェンジアップ / SP=スプリット / SK=シュート
+
+③ 打撃結果カテゴリを選択（continue/K/BB/outs/hits/miss/sacrifice）
+   └ 詳細結果（見逃し・空振り・単打 etc）を選択
+
+④ 必要に応じて追加項目を選択
+   └ 打撃結果2（PB/WP/ボーク等）・プレス・捕手牽制・作戦
+
+⑤ ランナー状況を選択（走者がいる場合）
+   └ 各走者の進塁先・アウト等を選択
+
+⑥ 打球情報を入力（ヒット・凡打時）
+   └ 打球種類（G/L/F）・強度（A/B/C）・捕球選手番号
+   └ フィールドマップをクリックして打球位置を入力（✔が表示されたら入力済み）
+
+⑦ 球速を入力（十の位 + 一の位で入力）
+
+⑧ 「記録」ボタンを押して確定
+```
+
+#### 中断・再開
+- 入力を途中でやめても自動でDBに保存されています
+- スタート画面の **「入力再開」** ボタンから試合を選んで続きから再開できます
+""" )
+
+        with g_tab2:
+            st.markdown( "#### 毎球入力できるデータ一覧" )
+            col_d1, col_d2 = st.columns( 2 )
+            with col_d1:
+                st.markdown( """
+**🎯 投球関連**
+| 項目 | 内容 |
+|------|------|
+| 構え | 打者の立ち位置（3高/3中/3低/中高/中中/中低/1高/1中/1低） |
+| コース | マップクリックで入力（25マス） |
+| 球種 | FB/CB/SL/CT/ST/2S/CH/SP/SK/OT |
+| 球速 | km/h（65〜199の範囲） |
+
+**⚾ 打撃結果**
+| カテゴリ | 選択肢 |
+|---------|--------|
+| continue | 見逃し・空振り・ファール・ボール |
+| K | 見逃し三振・空振り三振・振り逃げ・K3 |
+| BB | 四球・死球 |
+| outs | 凡打死・凡打出塁・ファールフライ |
+| hits | 単打・二塁打・三塁打・本塁打 |
+| miss | エラー・野手選択・犠打失策 |
+| sacrifice | 犠打・犠飛・犠打失策 |
+
+**➕ 打撃結果2**
+- PB（パスボール）・WP（ワイルドピッチ）
+- 守備妨害・打撃妨害・走塁妨害・ボーク
+""" )
+            with col_d2:
+                st.markdown( """
+**🏃 走塁関連**
+| 項目 | 内容 |
+|------|------|
+| ランナー状況（各走者） | 継続・二進・三進・本進・封殺・投手牽制死・捕手牽制死 |
+| 作戦 | 盗塁・バント・エンドラン |
+| 作戦詳細 | ディレード・Wスチール / セフティ・スクイズ・バスター / HAR・RAH等 |
+| 作戦結果 | 成功・失敗・盗塁成功 |
+
+**🤜 打球関連**
+| 項目 | 内容 |
+|------|------|
+| 打球種類 | G（ゴロ）・L（ライナー）・F（フライ） |
+| 打球強度 | A（強）・B（中）・C（弱） |
+| 捕球選手 | 背番号（1〜9） |
+| 打球位置 | フィールドマップクリックで入力 |
+
+**📌 その他**
+| 項目 | 内容 |
+|------|------|
+| プレス | 3プレス・1プレス・両プレス |
+| 捕手牽制 | 1塁・2塁・3塁牽制 |
+| エラー選手 | 背番号で指定 |
+| 偽走 | 偽投等 |
+""" )
+            st.info( "💡 **スコアボードは自動更新されます。** 得点・H・E・K・BBは入力内容から自動集計されます。" )
+
+        with g_tab3:
+            st.markdown( """
+#### メニュータブ（データ入力中に使用）
+
+| ボタン | 機能 |
+|--------|------|
+| ▶ 試合開始（開始時刻を記録） | **試合開始時に必ず押す**。開始時刻と経過時間を記録 |
+| 👤 選手交代 | メンバー入力画面に戻り、スタメンを変更できます |
+| ↩ 1つ削除して戻る | 直前に入力した1球を取り消してDBからも削除します |
+| 💾 CSV保存 | 現在の入力内容をCSVファイルとしてダウンロード |
+| 🔄 画面再表示 | 画面をリフレッシュします |
+| 🔧 状況変更 | イニング・得点・走者・カウントを手動で修正できます |
+| 🏁 試合終了（スタートに戻る） | セッションをリセットしてスタートページに戻ります |
+
+#### 🔧 状況変更 の詳細
+入力ミスや自動計算のズレが生じた場合に手動修正できます：
+- **イニング / 表裏** ： 現在のイニング・表裏を変更
+- **先攻・後攻得点** ： 得点を直接書き換え
+- **S / B / O** ： カウント・アウト数を修正
+- **打順 / 1走〜3走** ： 打順や走者の打順番号を修正
+- 「変更確定」を押すと反映されます
+""" )
+
+        with g_tab4:
+            st.markdown( """
+#### データ出力方法
+
+**1. 試合中にCSV保存**
+- メニュータブ → 「💾 CSV保存」でその時点のデータをCSVダウンロード
+
+**2. 試合後に一括確認・ダウンロード**
+- スタートページ → 「データベース確認・CSV保存」
+- 試合一覧から対象試合を選択して全データをCSV出力
+
+**3. JSONバックアップ（自動）**
+- 試合開始時に `data/game_{id}.json` が自動作成されます
+- 1球入力するたびにJSONに追記されます（サーバー障害時のバックアップ）
+
+#### 出力CSVに含まれる主な列
+試合日時 / Season / Kind / Week / Day / GameNumber / 主審 / 先攻チーム / 後攻チーム /
+回 / 表裏 / 先攻得点 / 後攻得点 / S / B / アウト /
+打順 / 打者氏名 / 打席左右 / 投手氏名 / 投手左右 / 球数 /
+コースX / コースY / 球種 / 球速 /
+打撃結果 / 打撃結果2 / 打球タイプ / 打球強度 / 捕球選手 / 打球位置X / 打球位置Y /
+一走〜三走 状況・氏名・打順 / 作戦 / 作戦2 / 作戦結果 / プレス /
+先攻打順 / 後攻打順 / 経過時間 / 開始時刻 / 現在時刻 / 他
+""" )
 
     with st.expander("チーム・選手登録"):
         bulk_ok = st.session_state.pop("bulk_add_success", None)
@@ -217,7 +362,6 @@ if st.session_state.page_ctg == "start":
                         st.warning("有効な行がありません。背番号,名前,左右 の形式で入力してください。")
         else:
             st.info("先にチームを追加してください。")
-    st.markdown("</div>", unsafe_allow_html=True)
 
 elif st.session_state.page_ctg == "member":
     if member_df is None:

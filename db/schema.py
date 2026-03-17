@@ -13,19 +13,37 @@ try:
     _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     load_dotenv(os.path.join(_project_root, '.env'))
 except ImportError:
-    pass
+    import warnings
+    warnings.warn( "python-dotenv が未インストールのため DATABASE_URL が読み込まれません。pip install python-dotenv を実行してください。" )
 
 DB_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'app_data.db')
 
 def _resolve_database_url() -> Optional[str]:
+    from urllib.parse import urlparse, urlunparse
     url = os.environ.get('DATABASE_URL')
-    if url:
-        return url
-    try:
-        import streamlit as _st
-        return _st.secrets.get("DATABASE_URL")
-    except Exception:
+    if not url:
+        try:
+            import streamlit as _st
+            url = _st.secrets.get("DATABASE_URL")
+        except Exception:
+            pass
+    if not url:
         return None
+    url = url.strip()
+    # Render等で誤って "DATABASE_URL=postgresql://..." と値に含めた場合の対処
+    if url.upper().startswith('DATABASE_URL='):
+        url = url[len('DATABASE_URL='):]
+    # postgres:// → postgresql:// (Heroku/Render互換)
+    if url.startswith('postgres://'):
+        url = 'postgresql://' + url[len('postgres://'):]
+    # URLをパースしてDB名(path)の余分なスペースを除去
+    try:
+        parsed = urlparse(url)
+        clean_path = parsed.path.strip()
+        url = urlunparse(parsed._replace(path=clean_path))
+    except Exception:
+        pass
+    return url or None
 
 def _get_database_url() -> Optional[str]:
     """毎回 DATABASE_URL を解決する（Streamlit Cloud では secrets の初期化タイミングが遅い場合があるため）"""

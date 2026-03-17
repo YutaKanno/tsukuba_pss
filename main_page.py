@@ -59,8 +59,8 @@ def update_list( list, top_poses, top_names, top_nums, top_lrs, bottom_poses, bo
         
     # アウトカウント + ランナー状況の更新
     new_out = list[16]
-    先攻打順 = list[73]
-    後攻打順 = list[74]
+    先攻打順 = int( list[73] ) if list[73] not in ( None, '' ) else 1
+    後攻打順 = int( list[74] ) if list[74] not in ( None, '' ) else 1
 
     捕手 = list[35]
     一走打順 = list[20]
@@ -178,7 +178,7 @@ def update_list( list, top_poses, top_names, top_nums, top_lrs, bottom_poses, bo
     
     
     # ストライクカウントの更新
-    if list[17] == '打席完了':
+    if list[17] == '打席完了' or new_out >= 3:
         S = 0
     else:
         if list[45] in ['見逃し', '空振り']:
@@ -192,7 +192,7 @@ def update_list( list, top_poses, top_names, top_nums, top_lrs, bottom_poses, bo
             S = list[14]
     
     # ボールカウントの更新
-    if list[17] == '打席完了':
+    if list[17] == '打席完了' or new_out >= 3:
         B = 0
     else:
         if list[45] == 'ボール':
@@ -627,7 +627,7 @@ def main_page(list):
                                 st.session_state[ '経過時間' ] = '0:00'
                         st.success(st.session_state[ '経過時間' ])
                         
-                    st.write(f'{コースX}-{コースY}')
+                    st.write( "✔" if コースX not in [ 0, None, '' ] else "" )
                     r_state = [0, 0, 0]
                     pickoff = ['0']
                     if 一走氏名 not in ['0', 0]:
@@ -1144,17 +1144,17 @@ def main_page(list):
                             st.session_state['runner_0_state'] = r0_state if r0_state in _r0_options else _r0_options[0]
                         打者状況 = st.selectbox(f'{打順}:{打者氏名}', _r0_options, key='runner_0_state')
                         if 一走氏名 not in ['0', 0]:
-                            _r1_options = ['継続', '二進', '三進', '本進', 'アウト', '封殺', '投手牽制死', '捕手牽制死'] if r1_state not in ['0', 0] else ['0']
+                            _r1_options = ['継続', '二進', '三進', '本進', '封殺', '投手牽制死', '捕手牽制死'] if r1_state not in ['0', 0] else ['0']
                             if 'runner_1_state' not in st.session_state:
                                 st.session_state['runner_1_state'] = r1_state if r1_state in _r1_options else _r1_options[0]
                             一走状況 = st.selectbox(f'1R:{一走氏名}', _r1_options, key='runner_1_state')
                         if 二走氏名 not in ['0', 0]:
-                            _r2_options = ['継続', '三進', '本進', 'アウト', '封殺', '投手牽制死', '捕手牽制死'] if r2_state not in ['0', 0] else ['0']
+                            _r2_options = ['継続', '三進', '本進', '封殺', '投手牽制死', '捕手牽制死'] if r2_state not in ['0', 0] else ['0']
                             if 'runner_2_state' not in st.session_state:
                                 st.session_state['runner_2_state'] = r2_state if r2_state in _r2_options else _r2_options[0]
                             二走状況 = st.selectbox(f'2R:{二走氏名}', _r2_options, key='runner_2_state')
                         if 三走氏名 not in ['0', 0]:
-                            _r3_options = ['継続', '本進', 'アウト', '封殺', '投手牽制死', '捕手牽制死'] if r3_state not in ['0', 0] else ['0']
+                            _r3_options = ['継続', '本進', '封殺', '投手牽制死', '捕手牽制死'] if r3_state not in ['0', 0] else ['0']
                             if 'runner_3_state' not in st.session_state:
                                 st.session_state['runner_3_state'] = r3_state if r3_state in _r3_options else _r3_options[0]
                             三走状況 = st.selectbox(f'3R{三走氏名}', _r3_options, key='runner_3_state')
@@ -1196,7 +1196,7 @@ def main_page(list):
                     打球位置X, 打球位置Y = 0, 0
                 
                 with col63:
-                    st.write(f'{打球位置X}-{打球位置Y}')
+                    st.write( "✔" if 打球位置X not in [ 0, None, '' ] else "" )
                         
 
                 球速 = 0
@@ -1431,33 +1431,29 @@ def main_page(list):
                                 st.rerun() # 画面を再表示
         
     with tab2:
-        # 試合終了（スタート画面に戻る）
-        if st.button( "試合終了（スタートに戻る）" ):
-            for key in [
-                "all_list",
-                "temp_list",
-                "data_list",
-                "current_game_id",
-                "経過時間",
-                "開始時刻",
-                "現在時刻",
-                "cached_dataframe",
-                "cached_all_list_len",
-                "already_rerun",
-            ]:
-                if key in st.session_state:
-                    del st.session_state[ key ]
-            st.session_state.page_ctg = "start"
-            st.session_state.game_start = "continue"
-            st.rerun()
-        st.write('## 試合開始')
-        st.success(f"試合開始: {st.session_state[ '開始時刻' ]}")
-        if st.button('試合開始'):
+        # ── ⏱ 試合開始時刻（最重要） ──
+        st.markdown( "### ⏱ 試合開始時刻" )
+        _開始時刻 = st.session_state.get( '開始時刻', '' )
+        if not _開始時刻 or str( _開始時刻 ) in [ '', '0' ]:
+            st.error( "⚠️ まだ試合開始ボタンが押されていません。試合記録の前に必ず押してください！" )
+        else:
+            st.success( f"✅ 試合開始: {_開始時刻}" )
+        if st.button( '▶ 試合開始（開始時刻を記録）', use_container_width = True, key = 'btn_game_start_menu' ):
             st.session_state[ '開始時刻' ] = datetime.now().strftime( '%H:%M:%S' )
-            st.success(f"試合開始: {st.session_state[ '開始時刻' ]}")
-        st.write('---')
-        st.markdown(f"## 設定")
-        if st.button('1つ削除して戻る'):
+            st.rerun()
+
+        st.divider()
+
+        # ── ⚙️ 設定 ──
+        st.markdown( "### ⚙️ 設定" )
+        _mcol1, _mcol2 = st.columns( 2 )
+        with _mcol1:
+            _do_player_sub = st.button( '👤 選手交代', use_container_width = True )
+        with _mcol2:
+            _do_delete = st.button( '↩ 1つ削除して戻る', use_container_width = True )
+        if _do_player_sub:
+            st.session_state.page_ctg = 'member'
+        if _do_delete:
             if st.session_state[ 'all_list' ]:
                 gid = st.session_state.get('current_game_id')
                 if gid is not None:
@@ -1546,121 +1542,149 @@ def main_page(list):
                 field.clear_canvas()
                 st.rerun()
 
-        if st.button('選手交代'):
-            st.session_state.page_ctg = 'member'
-            
         csv_str = dataframe.to_csv(index=False)
         csv_bytes = csv_str.encode("utf-8-sig")
-        
-        # バッファに乗せる
         csv_buffer = io.BytesIO(csv_bytes)
-
-        # ダウンロードボタン（バイナリデータ使用）
-        st.download_button(
-            label="データ保存",
-            data=csv_buffer,
-            file_name="game_data.csv",
-            mime="text/csv",
-            help="ゲームデータをCSVで保存"
-        )
-        
-        st.write('---')
-        st.write('画面の一部が表示されない場合:')
-        if st.button('ここをクリック'):
-            st.rerun()
-        
-        st.write('---')
-        st.write('## 状況変更')
-        change_回 = st.selectbox('イニング変更', [回, 1,2,3,4,5,6,7,8,9,10,11,12])
-        change_表裏 = st.selectbox('表裏変更', [表裏, '表', '裏'])
-        change_先攻得点 = st.text_input('先攻得点変更', 先攻得点)
-        change_後攻得点 = st.text_input('後攻得点変更', 後攻得点)
-        change_S = st.selectbox('S変更', [S, 0, 1, 2])
-        change_B = st.selectbox('B変更', [B, 0, 1, 2, 3])
-        change_アウト = st.selectbox('O変更', [アウト, 0, 1, 2])
-        change_打順 = st.selectbox('打順変更', [打順, 1, 2, 3, 4, 5, 6, 7, 8, 9])
-        change_一走打順 = st.selectbox('一走変更', [一走打順, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
-        change_二走打順 = st.selectbox('二走変更', [二走打順, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
-        change_三走打順 = st.selectbox('三走変更', [三走打順, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
-        # 変更確定ボタンが押されたとき
-        if st.button('変更確定'):
-            # 初期確認：data_list が存在するか、ない場合はエラー表示
-            if 'data_list' in st.session_state:
-                current_data2 = st.session_state[ 'data_list' ].copy()
-                
-                # 型変換（文字列を整数に直すなど）
-                try:
-                    change_先攻得点 = int(change_先攻得点)
-                    change_後攻得点 = int(change_後攻得点)
-                except ValueError:
-                    st.error('得点は数字で入力してください')
-                    st.stop()
-
-                # 対象インデックスを正確に更新
-                current_data2[10] = change_回
-                current_data2[11] = change_表裏
-                current_data2[12] = change_先攻得点
-                current_data2[13] = change_後攻得点
-                current_data2[14] = change_S
-                current_data2[15] = change_B
-                current_data2[16] = change_アウト
-
-                current_data2[20] = change_一走打順
-                current_data2[22] = change_二走打順
-                current_data2[24] = change_三走打順
-                current_data2[26] = change_打順
-                
-            
-                if change_一走打順 != 0:
-                    current_data2[36] = '継続'
-                    if change_表裏 == '表':
-                        current_data2[21] = top_names[change_一走打順-1]
-                    else:
-                        current_data2[21] = bottom_names[change_一走打順-1]
-                else:
-                    current_data2[36] = '0'
-                    current_data2[21] = '0'
-                    
-                if change_二走打順 != 0:
-                    current_data2[37] = '継続'
-                    if change_表裏 == '表':
-                        current_data2[23] = top_names[change_二走打順-1]
-                    else:
-                        current_data2[23] = bottom_names[change_二走打順-1]
-                else:
-                    current_data2[37] = '0'
-                    current_data2[23] = '0'
-                    
-                    
-                if change_三走打順 != 0:
-                    current_data2[38] = '継続'
-                    if change_表裏 == '表':
-                        current_data2[25] = top_names[change_三走打順-1]
-                    else:
-                        current_data2[25] = bottom_names[change_三走打順-1]
-                else:
-                    current_data2[38] = '0'
-                    current_data2[25] = '0'
-                    
-
-                # update_list() 関数を適用して、最新状態に変換
-                updated_list_ = update_list(
-                    current_data2, top_poses, top_names, top_nums, top_lrs,
-                    bottom_poses, bottom_names, bottom_nums, bottom_lrs,
-                    top_score, bottom_score
-                )
-                
-                
-                # 更新反映
-                st.session_state[ 'data_list' ] = updated_list_
-            
-                st.success('変更を反映しました')
+        _mcol3, _mcol4 = st.columns( 2 )
+        with _mcol3:
+            st.download_button(
+                label = "💾 CSV保存",
+                data = csv_buffer,
+                file_name = "game_data.csv",
+                mime = "text/csv",
+                use_container_width = True,
+            )
+        with _mcol4:
+            if st.button( '🔄 画面再表示', use_container_width = True ):
                 st.rerun()
-            else:
-                st.warning('まだプレイが入力されていません')
 
-            
+        st.divider()
 
+        # ── 🔧 状況変更 ──
+        with st.expander( "🔧 状況変更（イニング・得点・走者の修正）" ):
+            _sc1, _sc2, _sc3 = st.columns( 3 )
+            with _sc1:
+                change_回 = st.selectbox( 'イニング', [ 回, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 ] )
+            with _sc2:
+                change_表裏 = st.selectbox( '表/裏', [ 表裏, '表', '裏' ] )
+            with _sc3:
+                st.write( "" )  # 空き
+
+            _sc4, _sc5 = st.columns( 2 )
+            with _sc4:
+                change_先攻得点 = st.text_input( '先攻得点', 先攻得点 )
+            with _sc5:
+                change_後攻得点 = st.text_input( '後攻得点', 後攻得点 )
+
+            _sc6, _sc7, _sc8 = st.columns( 3 )
+            with _sc6:
+                change_S = st.selectbox( 'S', [ S, 0, 1, 2 ] )
+            with _sc7:
+                change_B = st.selectbox( 'B', [ B, 0, 1, 2, 3 ] )
+            with _sc8:
+                change_アウト = st.selectbox( 'O', [ アウト, 0, 1, 2 ] )
+
+            _sc9, _sc10, _sc11, _sc12 = st.columns( 4 )
+            with _sc9:
+                change_打順 = st.selectbox( '打順', [ 打順, 1, 2, 3, 4, 5, 6, 7, 8, 9 ] )
+            with _sc10:
+                change_一走打順 = st.selectbox( '1走', [ 一走打順, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 ] )
+            with _sc11:
+                change_二走打順 = st.selectbox( '2走', [ 二走打順, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 ] )
+            with _sc12:
+                change_三走打順 = st.selectbox( '3走', [ 三走打順, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 ] )
+            # 変更確定ボタンが押されたとき
+            if st.button( '変更確定', use_container_width = True ):
+                # 初期確認：data_list が存在するか、ない場合はエラー表示
+                if 'data_list' in st.session_state:
+                    current_data2 = st.session_state[ 'data_list' ].copy()
+
+                    # 型変換（文字列を整数に直すなど）
+                    try:
+                        change_先攻得点 = int( change_先攻得点 )
+                        change_後攻得点 = int( change_後攻得点 )
+                    except ValueError:
+                        st.error( '得点は数字で入力してください' )
+                        st.stop()
+
+                    # 対象インデックスを正確に更新
+                    current_data2[ 10 ] = change_回
+                    current_data2[ 11 ] = change_表裏
+                    current_data2[ 12 ] = change_先攻得点
+                    current_data2[ 13 ] = change_後攻得点
+                    current_data2[ 14 ] = change_S
+                    current_data2[ 15 ] = change_B
+                    current_data2[ 16 ] = change_アウト
+
+                    current_data2[ 20 ] = change_一走打順
+                    current_data2[ 22 ] = change_二走打順
+                    current_data2[ 24 ] = change_三走打順
+                    current_data2[ 26 ] = change_打順
+
+                    if change_一走打順 != 0:
+                        current_data2[ 36 ] = '継続'
+                        if change_表裏 == '表':
+                            current_data2[ 21 ] = top_names[ change_一走打順 - 1 ]
+                        else:
+                            current_data2[ 21 ] = bottom_names[ change_一走打順 - 1 ]
+                    else:
+                        current_data2[ 36 ] = '0'
+                        current_data2[ 21 ] = '0'
+
+                    if change_二走打順 != 0:
+                        current_data2[ 37 ] = '継続'
+                        if change_表裏 == '表':
+                            current_data2[ 23 ] = top_names[ change_二走打順 - 1 ]
+                        else:
+                            current_data2[ 23 ] = bottom_names[ change_二走打順 - 1 ]
+                    else:
+                        current_data2[ 37 ] = '0'
+                        current_data2[ 23 ] = '0'
+
+                    if change_三走打順 != 0:
+                        current_data2[ 38 ] = '継続'
+                        if change_表裏 == '表':
+                            current_data2[ 25 ] = top_names[ change_三走打順 - 1 ]
+                        else:
+                            current_data2[ 25 ] = bottom_names[ change_三走打順 - 1 ]
+                    else:
+                        current_data2[ 38 ] = '0'
+                        current_data2[ 25 ] = '0'
+
+                    # update_list() 関数を適用して、最新状態に変換
+                    updated_list_ = update_list(
+                        current_data2, top_poses, top_names, top_nums, top_lrs,
+                        bottom_poses, bottom_names, bottom_nums, bottom_lrs,
+                        top_score, bottom_score
+                    )
+
+                    # 更新反映
+                    st.session_state[ 'data_list' ] = updated_list_
+                    st.success( '変更を反映しました' )
+                    st.rerun()
+                else:
+                    st.warning( 'まだプレイが入力されていません' )
+
+        st.divider()
+
+        # ── 試合終了 ──
+        if st.button( "🏁 試合終了（スタートに戻る）", use_container_width = True ):
+            for k in [
+                'data_list', 'all_list', 'temp_list', 'current_game_id',
+                'top_team', 'bottom_team',
+                'top_poses', 'top_names', 'top_nums', 'top_lrs',
+                'bottom_poses', 'bottom_names', 'bottom_nums', 'bottom_lrs',
+                'top_score', 'bottom_score',
+                '開始時刻', '現在時刻', '経過時間',
+                'runner_0_state', 'runner_1_state', 'runner_2_state', 'runner_3_state',
+                '_prev_batting_result', '_prev_batting_result2', '_prev_pickoff_detail',
+                'last_confirmed_play_key', 'cached_all_list_len', 'already_rerun',
+                'reset_flag', 'radio_selection', 'pickoff_selection',
+            ]:
+                st.session_state.pop( k, None )
+            st.session_state.page_ctg = "start"
+            st.session_state.game_start = "continue"
+            st.rerun()
 
         return st.session_state[ 'data_list' ]
 

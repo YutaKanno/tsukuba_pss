@@ -206,6 +206,20 @@ def save_stamem_by_team_name(チーム名: str, poses: list, names: list, nums: 
     save_stamem(tid, poses, names, nums, lrs)
 
 
+def get_all_players_with_team() -> list:
+    """Return all players with team name in one JOIN query (list of dicts)."""
+    conn = schema.get_conn()
+    c = conn.cursor()
+    c.execute( '''
+        SELECT t.名前, p.背番号, p.名前, p.左右
+        FROM player p JOIN team t ON p.チーム_id = t.id
+        ORDER BY t.名前, CAST( p.背番号 AS INTEGER ), p.背番号
+    ''' )
+    rows = c.fetchall()
+    conn.close()
+    return [ { '大学名': r[ 0 ], '背番号': r[ 1 ], '名前': r[ 2 ], '左右': r[ 3 ] } for r in rows ]
+
+
 def migrate_member_remember(old_db_path: str = None) -> None:
     """Migrate member_remember from old DB to app_data.db team + stamem."""
     import os

@@ -13,6 +13,7 @@ from config import (
 )
 
 
+@st.cache_data( ttl = 60 )
 def get_member_data( 大学名 ):
     """指定された大学のスタメンデータを取得。app_data.db の stamem を使用。"""
     try:
@@ -121,6 +122,7 @@ def member_page( member_df, top_poses, top_names, top_nums, top_lrs, bottom_pose
             st.session_state.pop(f"{prefix}_num_{i}", None)
         for i in range(9):
             st.session_state.pop(f"{prefix}_pos_{i}", None)
+        get_member_data.clear()
 
     col1, col2 = st.columns(2)
     with col1:
@@ -145,6 +147,7 @@ def member_page( member_df, top_poses, top_names, top_nums, top_lrs, bottom_pose
             st.write(f"#### {st.session_state.top_team}")
 
         top_list = member_df[member_df['大学名'] == st.session_state.top_team].reset_index(drop=True)
+        top_lookup = { row[ '背番号' ]: ( row[ '名前' ], row[ '左右' ] ) for _, row in top_list.iterrows() }
 
         col11, col12, col13, col14 = st.columns([6, 2, 2, 5])
 
@@ -162,45 +165,26 @@ def member_page( member_df, top_poses, top_names, top_nums, top_lrs, bottom_pose
             st.write('#### P')
 
         with col13:
-            for i in range(10):
-                top_nums[i] = st.text_input(' ', label_visibility='collapsed', key=f'top_num_{i}', value=top_nums[i])
-                try:
-                    num = str(top_nums[i])
-                    matched = top_list[top_list['背番号'] == num]
-                    if not matched.empty:
-                        top_names[i] = matched.iloc[0]['名前']
-                        top_lrs[i] = matched.iloc[0]['左右']
-                    else:
-                        top_names[i] = ''
-                        top_lrs[i] = ''
-                except ValueError:
-                    top_names[i] = ''
-                    top_lrs[i] = ''
+            for i in range( 10 ):
+                top_nums[ i ] = st.text_input( ' ', label_visibility = 'collapsed', key = f'top_num_{i}', value = top_nums[ i ] )
+                num = str( top_nums[ i ] )
+                info = top_lookup.get( num )
+                top_names[ i ] = info[ 0 ] if info else ''
+                top_lrs[ i ]   = info[ 1 ] if info else ''
 
         with col14:
-            for i in range(10):
+            for i in range( 10 ):
                 # ユニーク key（チーム名＋背番号＋インデックス）
-                key_name = f"top_{st.session_state.top_team}_{top_nums[i]}_{i}"
-                
-                # session_state に存在しなければ初期化
-                if key_name not in st.session_state:
-                    st.session_state[key_name] = top_names[i]
+                key_name = f'top_{st.session_state.top_team}_{top_nums[ i ]}_{i}'
 
-                # 背番号から名前を取得して更新
-                num = str(top_nums[i])
-                matched = top_list[top_list['背番号'] == num]
-                if not matched.empty:
-                    st.session_state[key_name] = matched.iloc[0]['名前']
-                    top_lrs[i] = matched.iloc[0]['左右']
-                else:
-                    st.session_state[key_name] = ''
-                    top_lrs[i] = ''
+                # 辞書ルックアップ結果（col13 で計算済み）を session_state に反映
+                st.session_state[ key_name ] = top_names[ i ]
 
                 # text_input には value を渡さず key だけ
-                st.text_input(' ', label_visibility='collapsed', key=key_name)
-                
-                # 表示用の top_names に反映（必要なら）
-                top_names[i] = st.session_state[key_name]
+                st.text_input( ' ', label_visibility = 'collapsed', key = key_name )
+
+                # 表示用の top_names に反映
+                top_names[ i ] = st.session_state[ key_name ]
 
         # top_posesが2の名前を10番目に追加（names が 18 要素以上であること保証）
         while len(top_names) < 20:
@@ -231,6 +215,7 @@ def member_page( member_df, top_poses, top_names, top_nums, top_lrs, bottom_pose
             st.session_state.bottom_team = st.session_state.temp_list[7]
             st.write(f"#### {st.session_state.bottom_team}")
         bottom_list = member_df[member_df['大学名'] == st.session_state.bottom_team].reset_index(drop=True)
+        bottom_lookup = { row[ '背番号' ]: ( row[ '名前' ], row[ '左右' ] ) for _, row in bottom_list.iterrows() }
 
         col21, col22, col23, col24 = st.columns([2, 2, 5, 6])
 
@@ -247,46 +232,26 @@ def member_page( member_df, top_poses, top_names, top_nums, top_lrs, bottom_pose
             st.write('#### P')
 
         with col22:
-            for i in range(10):
-                bottom_nums[i] = st.text_input(' ', label_visibility='collapsed', key=f'bottom_num_{i}', value=bottom_nums[i])
-                try:
-                    num2 = str(bottom_nums[i])
-                    matched2 = bottom_list[bottom_list['背番号'] == num2]
-                    if not matched2.empty:
-                        bottom_names[i] = matched2.iloc[0]['名前']
-                        bottom_lrs[i] = matched2.iloc[0]['左右']
-                    else:
-                        bottom_names[i] = ''
-                        bottom_lrs[i] = ''
-
-                except ValueError:
-                    bottom_names[i] = ''
-                    bottom_lrs[i] = ''
+            for i in range( 10 ):
+                bottom_nums[ i ] = st.text_input( ' ', label_visibility = 'collapsed', key = f'bottom_num_{i}', value = bottom_nums[ i ] )
+                num2 = str( bottom_nums[ i ] )
+                info2 = bottom_lookup.get( num2 )
+                bottom_names[ i ] = info2[ 0 ] if info2 else ''
+                bottom_lrs[ i ]   = info2[ 1 ] if info2 else ''
 
         with col23:
-            for i in range(10):
+            for i in range( 10 ):
                 # ユニーク key（チーム名＋背番号＋インデックス）
-                key_name2 = f"bottom_{st.session_state.bottom_team}_{bottom_nums[i]}_{i}"
-                
-                # session_state に存在しなければ初期化
-                if key_name2 not in st.session_state:
-                    st.session_state[key_name2] = bottom_names[i]
+                key_name2 = f'bottom_{st.session_state.bottom_team}_{bottom_nums[ i ]}_{i}'
 
-                # 背番号から名前を取得して更新
-                num = str(bottom_nums[i])
-                matched = bottom_list[bottom_list['背番号'] == num]
-                if not matched.empty:
-                    st.session_state[key_name2] = matched.iloc[0]['名前']
-                    bottom_lrs[i] = matched.iloc[0]['左右']
-                else:
-                    st.session_state[key_name2] = ''
-                    bottom_lrs[i] = ''
+                # 辞書ルックアップ結果（col22 で計算済み）を session_state に反映
+                st.session_state[ key_name2 ] = bottom_names[ i ]
 
                 # text_input には value を渡さず key だけ
-                st.text_input(' ', label_visibility='collapsed', key=key_name2)
-                
-                # 表示用の top_names に反映（必要なら）
-                bottom_names[i] = st.session_state[key_name2]
+                st.text_input( ' ', label_visibility = 'collapsed', key = key_name2 )
+
+                # 表示用の bottom_names に反映
+                bottom_names[ i ] = st.session_state[ key_name2 ]
 
         # bottom_posesが2の名前を10番目に追加（names が 18 要素以上であること保証）
         while len(bottom_names) < 20:

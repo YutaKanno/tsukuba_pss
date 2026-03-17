@@ -2,11 +2,31 @@
 DB operations for game and per-play data.
 """
 import json
+import os
 import sqlite3
 from datetime import datetime
 from typing import Any, List, Optional, Tuple
 
 from . import schema
+
+
+def _get_game_json_path( game_id: int ) -> str:
+    data_dir = os.path.dirname( schema.DB_FILE )
+    return os.path.join( data_dir, f'game_{game_id}.json' )
+
+
+def _update_game_json_plays( game_id: int, row_list: list ) -> None:
+    path = _get_game_json_path( game_id )
+    if not os.path.exists( path ):
+        return
+    try:
+        with open( path, 'r', encoding = 'utf-8' ) as f:
+            data = json.load( f )
+        data.setdefault( 'plays', [] ).append( row_list )
+        with open( path, 'w', encoding = 'utf-8' ) as f:
+            json.dump( data, f, ensure_ascii = False, indent = 2 )
+    except Exception:
+        pass
 
 
 def _row_to_db(game_id: int, row_list: list) -> dict:
@@ -116,6 +136,26 @@ def create_game(
     gid = c.lastrowid
     conn.commit()
     conn.close()
+    try:
+        path = _get_game_json_path( gid )
+        game_data = {
+            'game_id'    : gid,
+            '試合日時'   : 試合日時,
+            '先攻チーム' : 先攻チーム名,
+            '後攻チーム' : 後攻チーム名,
+            '主審'       : 主審,
+            'Season'     : Season,
+            'Kind'       : Kind,
+            'Week'       : Week,
+            'Day'        : Day,
+            'GameNumber' : GameNumber,
+            'created_at' : datetime.now().isoformat(),
+            'plays'      : [],
+        }
+        with open( path, 'w', encoding = 'utf-8' ) as f:
+            json.dump( game_data, f, ensure_ascii = False, indent = 2 )
+    except Exception:
+        pass
     return gid
 
 
@@ -168,6 +208,7 @@ def insert_play(game_id: int, row_list: list) -> None:
     c.execute(f'INSERT INTO play_data ({cols}) VALUES ({placeholders})', list(d.values()))
     conn.commit()
     conn.close()
+    _update_game_json_plays( game_id, row_list )
 
 
 def get_game_teams(game_id: int) -> Tuple[Optional[str], Optional[str]]:
