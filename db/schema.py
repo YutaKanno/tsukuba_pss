@@ -7,6 +7,8 @@ import re
 import sqlite3
 from typing import Any, Optional, Union
 
+import streamlit as st
+
 # Load .env so DATABASE_URL is available (from project root so cwd-independent)
 try:
     from dotenv import load_dotenv
@@ -110,8 +112,9 @@ class _PgCursorWrapper:
 
 class _PgConnWrapper:
     """Connection wrapper that returns cursor wrappers."""
-    def __init__(self, conn: Any):
+    def __init__(self, conn: Any, pool: Any = None):
         self._conn = conn
+        self._pool = pool
 
     def cursor(self) -> _PgCursorWrapper:
         return _PgCursorWrapper(self._conn, self._conn.cursor())
@@ -120,15 +123,42 @@ class _PgConnWrapper:
         self._conn.commit()
 
     def close(self) -> None:
-        self._conn.close()
+        if self._pool is not None:
+            try:
+                self._pool.putconn(self._conn)
+            except Exception:
+                try:
+                    self._conn.close()
+                except Exception:
+                    pass
+        else:
+            self._conn.close()
+
+
+@st.cache_resource(show_spinner=False)
+def _get_pg_pool():
+    """PostgreSQL接続プールをキャッシュして使い回す（接続コストを削減）。"""
+    import psycopg2.pool
+    url = _get_database_url()
+    return psycopg2.pool.SimpleConnectionPool(1, 3, url)
 
 
 def get_conn() -> Union[sqlite3.Connection, _PgConnWrapper]:
     """Return a connection to the app database (SQLite or Supabase PostgreSQL)."""
     if is_postgres():
         import psycopg2
-        conn = psycopg2.connect(_get_database_url())
-        return _PgConnWrapper(conn)
+        try:
+            pool = _get_pg_pool()
+            conn = pool.getconn()
+            conn.autocommit = False
+            return _PgConnWrapper(conn, pool)
+        except Exception:
+            # プールが枯渇・切断された場合はキャッシュをクリアして再試行
+            _get_pg_pool.clear()
+            pool = _get_pg_pool()
+            conn = pool.getconn()
+            conn.autocommit = False
+            return _PgConnWrapper(conn, pool)
     return sqlite3.connect(DB_FILE)
 
 

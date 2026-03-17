@@ -6,7 +6,7 @@ import uuid
 
 import streamlit as st
 from PIL import Image, ImageDraw, ImageFont
-from streamlit_image_coordinates import streamlit_image_coordinates
+from streamlit_drawable_canvas import st_canvas
 
 
 @st.cache_resource

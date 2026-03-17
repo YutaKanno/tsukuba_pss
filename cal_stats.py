@@ -4,8 +4,10 @@ Compute pitcher/batter stats for display.
 from typing import Any, Union
 
 import pandas as pd
+import streamlit as st
 
 
+@st.cache_data(show_spinner=False)
 def cal_stats(
     df: pd.DataFrame,
     投手氏名: str,
@@ -187,6 +189,7 @@ def cal_stats(
 
 
 
+@st.cache_data(show_spinner=False)
 def pt_pct( 投手氏名, df ):
     dff = df[(df['投手氏名'] == 投手氏名) & (df['プレイの種類'] == '投球')]
     counts = dff["球種"].value_counts()
@@ -196,6 +199,7 @@ def pt_pct( 投手氏名, df ):
     return labels, values
 
 
+@st.cache_data(show_spinner=False)
 def calc_hekb( df, 先攻チーム, 後攻チーム, 試合日時 ):
     dff = df[(df['試合日時'] == 試合日時) & (df['先攻チーム'] == 先攻チーム) & (df['後攻チーム'] == 後攻チーム)]
     dfft = dff[dff['表.裏'] == '表']

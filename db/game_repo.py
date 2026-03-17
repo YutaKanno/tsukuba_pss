@@ -124,7 +124,6 @@ def create_game(
 ) -> int:
     """Create a new game and return game_id; ensure teams exist."""
     from . import player_repo
-    schema.init_db()
     top_id = player_repo.ensure_team(先攻チーム名)
     bottom_id = player_repo.ensure_team(後攻チーム名)
     conn = schema.get_conn()
@@ -171,7 +170,6 @@ def get_game(game_id):
 
 def list_games(limit: int = 100) -> List[Tuple[Any, ...]]:
     """Return list of games (newest first), each row (id, 試合日時, Season, Kind, 先攻, 後攻)."""
-    schema.init_db()
     conn = schema.get_conn()
     c = conn.cursor()
     c.execute('''
@@ -199,7 +197,6 @@ def get_play_list(game_id: int) -> List[list]:
 
 def insert_play(game_id: int, row_list: list) -> None:
     """Insert one play; row_list is one all_list row (88 elements)."""
-    schema.init_db()
     d = _row_to_db(game_id, row_list)
     conn = schema.get_conn()
     c = conn.cursor()

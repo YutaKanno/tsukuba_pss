@@ -10,7 +10,6 @@ from . import schema
 
 def ensure_team(名前: str) -> int:
     """Ensure team exists by name; return team id."""
-    schema.init_db()
     conn = schema.get_conn()
     c = conn.cursor()
     c.execute('SELECT id FROM team WHERE 名前 = ?', (名前,))
@@ -27,7 +26,6 @@ def ensure_team(名前: str) -> int:
 
 def list_teams() -> List[Tuple[int, str]]:
     """Return all teams as list of (id, name)."""
-    schema.init_db()
     conn = schema.get_conn()
     c = conn.cursor()
     c.execute('SELECT id, 名前 FROM team ORDER BY 名前')
@@ -70,7 +68,6 @@ def delete_player(チーム_id: int, 背番号: str) -> None:
 
 def add_player(チーム_id: int, 背番号: str, 名前: str, 左右: str) -> None:
     """Insert one player."""
-    schema.init_db()
     conn = schema.get_conn()
     c = conn.cursor()
     c.execute(
@@ -85,7 +82,6 @@ def add_players_bulk(チーム_id: int, rows: List[Tuple[str, str, str]]) -> int
     """Bulk insert players; (team_id, number) duplicates are ignored. Return count inserted."""
     if not rows:
         return 0
-    schema.init_db()
     conn = schema.get_conn()
     c = conn.cursor()
     n = 0
@@ -166,7 +162,6 @@ def get_stamem_by_team_name(チーム名: str) -> Optional[dict]:
 
 def save_stamem(チーム_id: int, poses: list, names: list, nums: list, lrs: list) -> None:
     """Save lineup for the team."""
-    schema.init_db()
     conn = schema.get_conn()
     c = conn.cursor()
     try:
@@ -228,7 +223,6 @@ def migrate_member_remember(old_db_path: str = None) -> None:
     if not os.path.exists( old_db_path ):
         return
     old = sqlite3.connect(old_db_path)
-    schema.init_db()
     conn = schema.get_conn()
     c = conn.cursor()
     for row in old.execute('SELECT 大学名, poses, names, nums, lrs FROM member_remember'):

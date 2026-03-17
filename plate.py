@@ -7,7 +7,7 @@ import os
 from typing import Optional, Tuple
 
 import streamlit as st
-from streamlit_image_coordinates import streamlit_image_coordinates
+from streamlit_drawable_canvas import st_canvas
 from PIL import Image, ImageDraw
 
 
