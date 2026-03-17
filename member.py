@@ -122,6 +122,7 @@ def member_page( member_df, top_poses, top_names, top_nums, top_lrs, bottom_pose
             st.session_state.pop(f"{prefix}_num_{i}", None)
         for i in range(9):
             st.session_state.pop(f"{prefix}_pos_{i}", None)
+        st.session_state.pop(f"_stamem_loaded_{prefix}", None)
         get_member_data.clear()
 
     col1, col2 = st.columns(2)
@@ -142,6 +143,14 @@ def member_page( member_df, top_poses, top_names, top_nums, top_lrs, bottom_pose
                 top_poses, top_names, top_nums, top_lrs = mr_top["poses"], mr_top["names"], mr_top["nums"], mr_top["lrs"]
             else:
                 top_poses, top_names, top_nums, top_lrs = DEFAULT_TOP_POSES.copy(), DEFAULT_TOP_NAMES.copy(), DEFAULT_TOP_NUMS.copy(), DEFAULT_TOP_LRS.copy()
+            # session_stateにウィジェットキーが残っているとvalue=が無視されるため、
+            # チームごとに1回だけ強制上書きする（ユーザーが編集した後は上書きしない）
+            if st.session_state.get("_stamem_loaded_top") != st.session_state.top_team:
+                for i in range(9):
+                    st.session_state[f'top_pos_{i}'] = top_poses[i]
+                for i in range(10):
+                    st.session_state[f'top_num_{i}'] = str(top_nums[i]) if top_nums[i] is not None else ""
+                st.session_state["_stamem_loaded_top"] = st.session_state.top_team
         else:
             st.session_state.top_team = st.session_state.temp_list[8]
             st.write(f"#### {st.session_state.top_team}")
@@ -211,6 +220,12 @@ def member_page( member_df, top_poses, top_names, top_nums, top_lrs, bottom_pose
                 bottom_poses, bottom_names, bottom_nums, bottom_lrs = mr_bottom["poses"], mr_bottom["names"], mr_bottom["nums"], mr_bottom["lrs"]
             else:
                 bottom_poses, bottom_names, bottom_nums, bottom_lrs = DEFAULT_BOTTOM_POSES.copy(), DEFAULT_BOTTOM_NAMES.copy(), DEFAULT_BOTTOM_NUMS.copy(), DEFAULT_BOTTOM_LRS.copy()
+            if st.session_state.get("_stamem_loaded_bottom") != st.session_state.bottom_team:
+                for i in range(9):
+                    st.session_state[f'bottom_pos_{i}'] = bottom_poses[i]
+                for i in range(10):
+                    st.session_state[f'bottom_num_{i}'] = str(bottom_nums[i]) if bottom_nums[i] is not None else ""
+                st.session_state["_stamem_loaded_bottom"] = st.session_state.bottom_team
         else:
             st.session_state.bottom_team = st.session_state.temp_list[7]
             st.write(f"#### {st.session_state.bottom_team}")

@@ -89,6 +89,9 @@ if st.session_state.page_ctg == "start":
         if st.button( "試合開始", disabled = not has_teams, use_container_width = True, type = "primary" ):
             st.session_state.page_ctg = "member"
             st.session_state.game_start = "start"
+            # 前試合のスタメンロード済みフラグをリセット（新試合でDBから再読み込みさせる）
+            for _k in ["_stamem_loaded_top", "_stamem_loaded_bottom"]:
+                st.session_state.pop(_k, None)
             st.rerun()
         if not has_teams:
             st.caption( "※ 先にチーム・選手登録が必要です" )
