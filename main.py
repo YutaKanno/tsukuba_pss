@@ -85,29 +85,51 @@ def _login_page(cookie_ctrl) -> None:
     """ログインページを表示し、認証を処理する。"""
     st.title("Tsukuba PSS")
     st.divider()
+
+    # ── ログイン ──
     st.subheader("ログイン")
+    teams = player_repo.list_teams()
+    team_names = [t[1] for t in teams] if teams else []
 
-    team_input = st.text_input("チーム名", key="login_team_input")
-    pw         = st.text_input("パスワード", type="password", key="login_pw")
+    if not team_names:
+        st.info("チームがまだ登録されていません。下の「新規チーム追加」から登録してください。")
+    else:
+        sel = st.selectbox("チームを選択", team_names, key="login_team_sel")
+        pw  = st.text_input("パスワード", type="password", key="login_pw")
+        c_btn, _ = st.columns([1, 3])
+        with c_btn:
+            if st.button("ログイン", type="primary", use_container_width=True, key="login_btn"):
+                tid = player_repo.get_team_id_by_name(sel)
+                ph  = player_repo.get_team_password_hash(tid)
+                if ph is None:
+                    st.error("このチームのパスワードが設定されていません。管理者に問い合わせてください。")
+                elif _auth.check_password(pw, ph):
+                    _set_auth_session(cookie_ctrl, tid, sel)
+                else:
+                    st.error("パスワードが正しくありません。")
 
-    c_btn, _ = st.columns([1, 3])
-    with c_btn:
-        if st.button("ログイン", type="primary", use_container_width=True, key="login_btn"):
-            name = team_input.strip()
+    st.divider()
+
+    # ── 新規チーム追加 ──
+    with st.expander("新規チーム追加"):
+        new_team = st.text_input("チーム名", key="new_team_name")
+        new_pw1  = st.text_input("パスワード", type="password", key="new_team_pw1")
+        new_pw2  = st.text_input("パスワード（確認）", type="password", key="new_team_pw2")
+        if st.button("チームを登録", type="primary", key="new_team_btn"):
+            name = new_team.strip()
             if not name:
                 st.error("チーム名を入力してください。")
+            elif not new_pw1:
+                st.error("パスワードを入力してください。")
+            elif new_pw1 != new_pw2:
+                st.error("パスワードが一致しません。")
+            elif player_repo.get_team_id_by_name(name) is not None:
+                st.error("そのチーム名はすでに登録されています。")
             else:
-                tid = player_repo.get_team_id_by_name(name)
-                if tid is None:
-                    st.error("チーム名またはパスワードが正しくありません。")
-                else:
-                    ph = player_repo.get_team_password_hash(tid)
-                    if ph is None:
-                        st.error("このチームのパスワードが設定されていません。管理者に問い合わせてください。")
-                    elif _auth.check_password(pw, ph):
-                        _set_auth_session(cookie_ctrl, tid, name)
-                    else:
-                        st.error("チーム名またはパスワードが正しくありません。")
+                tid = player_repo.ensure_team(name)
+                player_repo.set_team_password(tid, _auth.hash_password(new_pw1))
+                st.success(f"「{name}」を登録しました。ログインしてください。")
+                st.rerun()
 
 
 # --- ページ設定・スタイル ---
