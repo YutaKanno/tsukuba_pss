@@ -37,16 +37,22 @@ def ensure_db() -> None:
     schema.migrate_add_team_password()
     schema.migrate_add_game_owner()
     schema.migrate_associate_existing_games("トヨタ自動車東日本")
-    # 各チームのパスワードが未設定なら初期設定
+    # 環境変数 INITIAL_TEAM_PASSWORDS (JSON) からチームとパスワードを設定
+    # 例: {"トヨタ自動車東日本":"password1","筑波大学":"password2"}
     try:
+        import json, os
         import auth as _a
-        for _team_name, _team_pw in [
-            ("トヨタ自動車東日本", "iiokataisei"),
-            ("筑波大学",           "tkashikawamura"),
-        ]:
-            _tid = player_repo.ensure_team(_team_name)
-            if player_repo.get_team_password_hash(_tid) is None:
-                player_repo.set_team_password(_tid, _a.hash_password(_team_pw))
+        _raw = None
+        try:
+            _raw = st.secrets.get("INITIAL_TEAM_PASSWORDS")
+        except Exception:
+            pass
+        if not _raw:
+            _raw = os.environ.get("INITIAL_TEAM_PASSWORDS")
+        if _raw:
+            for _tname, _tpw in json.loads(_raw).items():
+                _tid = player_repo.ensure_team(str(_tname))
+                player_repo.set_team_password(_tid, _a.hash_password(str(_tpw)))
     except Exception:
         pass
     try:
