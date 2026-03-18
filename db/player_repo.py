@@ -201,6 +201,16 @@ def save_stamem_by_team_name(チーム名: str, poses: list, names: list, nums: 
     save_stamem(tid, poses, names, nums, lrs)
 
 
+def list_teams_with_password() -> List[Tuple[int, str]]:
+    """Return teams that have a password set (id, name)."""
+    conn = schema.get_conn()
+    c = conn.cursor()
+    c.execute("SELECT id, 名前 FROM team WHERE password_hash IS NOT NULL ORDER BY 名前")
+    rows = c.fetchall()
+    conn.close()
+    return rows
+
+
 def get_team_password_hash(team_id: int) -> Optional[str]:
     """Return password_hash for the team, or None if not set."""
     conn = schema.get_conn()

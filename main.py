@@ -97,7 +97,7 @@ def _login_page(cookie_ctrl) -> None:
 
     # ── ログイン ──
     st.subheader("ログイン")
-    teams = player_repo.list_teams()
+    teams = player_repo.list_teams_with_password()
     team_names = [t[1] for t in teams] if teams else []
 
     if not team_names:
