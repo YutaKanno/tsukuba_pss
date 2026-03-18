@@ -37,6 +37,14 @@ def ensure_db() -> None:
     schema.migrate_add_team_password()
     schema.migrate_add_game_owner()
     schema.migrate_associate_existing_games("トヨタ自動車東日本")
+    # トヨタ自動車東日本のパスワードが未設定なら初期設定
+    try:
+        _toyota_id = player_repo.ensure_team("トヨタ自動車東日本")
+        if player_repo.get_team_password_hash(_toyota_id) is None:
+            import auth as _a
+            player_repo.set_team_password(_toyota_id, _a.hash_password("iiokataisei"))
+    except Exception:
+        pass
     try:
         player_repo.migrate_member_remember()
     except Exception:
@@ -77,47 +85,29 @@ def _login_page(cookie_ctrl) -> None:
     """ログインページを表示し、認証を処理する。"""
     st.title("Tsukuba PSS")
     st.divider()
-
-    teams = player_repo.list_teams()
-
-    # ── 初回セットアップ（チームが1件もない場合）──
-    if not teams:
-        st.info("初回セットアップ: チームを登録してからログインしてください。")
-        with st.expander("チームを新規登録", expanded=True):
-            new_team = st.text_input("チーム名", key="setup_team_name")
-            new_pw   = st.text_input("パスワード", type="password", key="setup_pw1")
-            new_pw2  = st.text_input("パスワード（確認）", type="password", key="setup_pw2")
-            if st.button("登録してログイン", type="primary", key="setup_register_btn"):
-                if not new_team.strip():
-                    st.error("チーム名を入力してください。")
-                elif new_pw != new_pw2:
-                    st.error("パスワードが一致しません。")
-                elif not new_pw:
-                    st.error("パスワードを設定してください。")
-                else:
-                    tid = player_repo.ensure_team(new_team.strip())
-                    player_repo.set_team_password(tid, _auth.hash_password(new_pw))
-                    _set_auth_session(cookie_ctrl, tid, new_team.strip())
-        return
-
-    # ── 通常ログイン ──
     st.subheader("ログイン")
-    team_names = [t[1] for t in teams]
-    sel = st.selectbox("チームを選択", team_names, key="login_team_sel")
-    pw  = st.text_input("パスワード", type="password", key="login_pw")
+
+    team_input = st.text_input("チーム名", key="login_team_input")
+    pw         = st.text_input("パスワード", type="password", key="login_pw")
 
     c_btn, _ = st.columns([1, 3])
     with c_btn:
         if st.button("ログイン", type="primary", use_container_width=True, key="login_btn"):
-            tid = player_repo.get_team_id_by_name(sel)
-            ph  = player_repo.get_team_password_hash(tid)
-            if ph is None:
-                # パスワード未設定チームは暫定的に入室可（設定を促す）
-                _set_auth_session(cookie_ctrl, tid, sel)
-            elif _auth.check_password(pw, ph):
-                _set_auth_session(cookie_ctrl, tid, sel)
+            name = team_input.strip()
+            if not name:
+                st.error("チーム名を入力してください。")
             else:
-                st.error("パスワードが正しくありません。")
+                tid = player_repo.get_team_id_by_name(name)
+                if tid is None:
+                    st.error("チーム名またはパスワードが正しくありません。")
+                else:
+                    ph = player_repo.get_team_password_hash(tid)
+                    if ph is None:
+                        st.error("このチームのパスワードが設定されていません。管理者に問い合わせてください。")
+                    elif _auth.check_password(pw, ph):
+                        _set_auth_session(cookie_ctrl, tid, name)
+                    else:
+                        st.error("チーム名またはパスワードが正しくありません。")
 
 
 # --- ページ設定・スタイル ---
