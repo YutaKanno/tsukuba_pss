@@ -1344,7 +1344,11 @@ def main_page(list):
                                 if gid is not None:
                                     try:
                                         from db import game_repo
-                                        game_repo.insert_play(gid, inputed_list)
+                                        import streamlit as _st
+                                        game_repo.insert_play(
+                                            gid, inputed_list,
+                                            owner_team_id=_st.session_state.get("logged_in_team_id"),
+                                        )
                                     except Exception as e:
                                         st.warning(f"プレイデータの保存に失敗しました: {e}")
                                 if 'cached_all_list_len' in st.session_state:
@@ -1453,7 +1457,11 @@ def main_page(list):
                 if gid is not None:
                     try:
                         from db import game_repo
-                        game_repo.delete_last_play(gid)
+                        import streamlit as _st
+                        game_repo.delete_last_play(
+                            gid,
+                            owner_team_id=_st.session_state.get("logged_in_team_id"),
+                        )
                     except Exception:
                         pass
                 last_entry = st.session_state[ 'all_list' ].pop()

@@ -197,58 +197,105 @@ def list_games(limit: int = 100, team_id: Optional[int] = None) -> List[Tuple[An
     return rows
 
 
-def get_play_list(game_id: int) -> List[list]:
-    """Return play data for the game as all_list format (list of 88-element lists)."""
+def _assert_owner(c: Any, game_id: int, owner_team_id: int) -> None:
+    """Raise PermissionError if game does not belong to owner_team_id (SQL-level check)."""
+    c.execute('SELECT 1 FROM game WHERE id = ? AND owner_team_id = ?', (game_id, owner_team_id))
+    if not c.fetchone():
+        raise PermissionError(f"game {game_id} does not belong to team {owner_team_id}")
+
+
+def get_play_list(game_id: int, owner_team_id: Optional[int] = None) -> List[list]:
+    """Return play data for the game. Raises PermissionError if owner_team_id is given and does not match."""
     conn = schema.get_conn()
     c = conn.cursor()
-    c.execute('SELECT * FROM play_data WHERE 試合_id = ? ORDER BY プレイの番号', (game_id,))
+    if owner_team_id is not None:
+        # ownership と play_data 取得を同一クエリで行う（TOCTOU 防止）
+        c.execute(
+            'SELECT * FROM play_data WHERE 試合_id = ? '
+            'AND 試合_id IN (SELECT id FROM game WHERE owner_team_id = ?) '
+            'ORDER BY プレイの番号',
+            (game_id, owner_team_id)
+        )
+    else:
+        c.execute('SELECT * FROM play_data WHERE 試合_id = ? ORDER BY プレイの番号', (game_id,))
     rows = c.fetchall()
     conn.close()
     return [_db_row_to_list(r) for r in rows]
 
 
-def insert_play(game_id: int, row_list: list) -> None:
-    """Insert one play; row_list is one all_list row (88 elements)."""
+def insert_play(game_id: int, row_list: list, owner_team_id: Optional[int] = None) -> None:
+    """Insert one play. Raises PermissionError if owner_team_id is given and does not match."""
     d = _row_to_db(game_id, row_list)
     conn = schema.get_conn()
     c = conn.cursor()
+    if owner_team_id is not None:
+        _assert_owner(c, game_id, owner_team_id)
     cols = ', '.join(d.keys())
     placeholders = ', '.join('?' * len(d))
     c.execute(f'INSERT INTO play_data ({cols}) VALUES ({placeholders})', list(d.values()))
     conn.commit()
     conn.close()
-    _update_game_json_plays( game_id, row_list )
+    _update_game_json_plays(game_id, row_list)
 
 
-def get_game_teams(game_id: int) -> Tuple[Optional[str], Optional[str]]:
-    """Return (top_team_name, bottom_team_name) for the game."""
+def get_game_teams(game_id: int, owner_team_id: Optional[int] = None) -> Tuple[Optional[str], Optional[str]]:
+    """Return (top_team_name, bottom_team_name) for the game. Returns (None, None) if ownership fails."""
     conn = schema.get_conn()
     c = conn.cursor()
-    c.execute('''
-        SELECT t1.名前, t2.名前 FROM game g
-        JOIN team t1 ON g.先攻チーム_id = t1.id
-        JOIN team t2 ON g.後攻チーム_id = t2.id
-        WHERE g.id = ?
-    ''', (game_id,))
+    if owner_team_id is not None:
+        c.execute('''
+            SELECT t1.名前, t2.名前 FROM game g
+            JOIN team t1 ON g.先攻チーム_id = t1.id
+            JOIN team t2 ON g.後攻チーム_id = t2.id
+            WHERE g.id = ? AND g.owner_team_id = ?
+        ''', (game_id, owner_team_id))
+    else:
+        c.execute('''
+            SELECT t1.名前, t2.名前 FROM game g
+            JOIN team t1 ON g.先攻チーム_id = t1.id
+            JOIN team t2 ON g.後攻チーム_id = t2.id
+            WHERE g.id = ?
+        ''', (game_id,))
     row = c.fetchone()
     conn.close()
     return (row[0], row[1]) if row else (None, None)
 
 
-def delete_last_play(game_id: int) -> None:
-    """Delete the last play of the given game."""
+def delete_last_play(game_id: int, owner_team_id: Optional[int] = None) -> None:
+    """Delete the last play of the given game. No-op if ownership fails."""
     conn = schema.get_conn()
     c = conn.cursor()
-    c.execute('DELETE FROM play_data WHERE 試合_id = ? AND id = (SELECT MAX(id) FROM play_data WHERE 試合_id = ?)', (game_id, game_id))
+    if owner_team_id is not None:
+        # 所有権チェックを WHERE 句に含める（アトミック）
+        c.execute(
+            'DELETE FROM play_data WHERE 試合_id = ? '
+            'AND 試合_id IN (SELECT id FROM game WHERE owner_team_id = ?) '
+            'AND id = (SELECT MAX(id) FROM play_data WHERE 試合_id = ?)',
+            (game_id, owner_team_id, game_id)
+        )
+    else:
+        c.execute(
+            'DELETE FROM play_data WHERE 試合_id = ? AND id = (SELECT MAX(id) FROM play_data WHERE 試合_id = ?)',
+            (game_id, game_id)
+        )
     conn.commit()
     conn.close()
 
 
-def delete_game(game_id: int) -> None:
-    """Delete a game and all its play_data rows."""
+def delete_game(game_id: int, owner_team_id: Optional[int] = None) -> None:
+    """Delete a game and all its play_data rows. No-op if ownership fails."""
     conn = schema.get_conn()
     c = conn.cursor()
-    c.execute('DELETE FROM play_data WHERE 試合_id = ?', (game_id,))
-    c.execute('DELETE FROM game WHERE id = ?', (game_id,))
+    if owner_team_id is not None:
+        # play_data は owner_team_id で絞った game の分のみ削除
+        c.execute(
+            'DELETE FROM play_data WHERE 試合_id = ? '
+            'AND 試合_id IN (SELECT id FROM game WHERE owner_team_id = ?)',
+            (game_id, owner_team_id)
+        )
+        c.execute('DELETE FROM game WHERE id = ? AND owner_team_id = ?', (game_id, owner_team_id))
+    else:
+        c.execute('DELETE FROM play_data WHERE 試合_id = ?', (game_id,))
+        c.execute('DELETE FROM game WHERE id = ?', (game_id,))
     conn.commit()
     conn.close()

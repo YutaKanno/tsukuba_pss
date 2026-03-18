@@ -108,7 +108,8 @@ def run() -> None:
 
     with tab4:
         st.subheader("試合一覧")
-        games = game_repo.list_games(limit=500)
+        _tid = st.session_state.get("logged_in_team_id")
+        games = game_repo.list_games(limit=500, team_id=_tid)
         if not games:
             st.info("試合がまだありません。")
         else:
@@ -121,7 +122,8 @@ def run() -> None:
 
     with tab5:
         st.subheader("試合を選んでCSV保存")
-        games = game_repo.list_games(limit=500)
+        _tid = st.session_state.get("logged_in_team_id")
+        games = game_repo.list_games(limit=500, team_id=_tid)
         if not games:
             st.info("試合がまだありません。試合を開始してデータを入力すると保存できます。")
         else:
@@ -150,7 +152,7 @@ def run() -> None:
                     # 1試合 → 単一CSV
                     idx = selected_csv[0]
                     gid = games[idx][0]
-                    play_list = game_repo.get_play_list(gid)
+                    play_list = game_repo.get_play_list(gid, owner_team_id=_tid)
                     if not play_list:
                         st.warning("この試合にはまだ1球もデータがありません。")
                     else:
@@ -173,7 +175,7 @@ def run() -> None:
                     with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
                         for idx in selected_csv:
                             gid = games[idx][0]
-                            play_list = game_repo.get_play_list(gid)
+                            play_list = game_repo.get_play_list(gid, owner_team_id=_tid)
                             if not play_list:
                                 empty_games.append(options_csv[idx])
                                 continue
@@ -196,7 +198,8 @@ def run() -> None:
 
     with tab6:
         st.subheader("試合削除")
-        games = game_repo.list_games(limit=500)
+        _tid = st.session_state.get("logged_in_team_id")
+        games = game_repo.list_games(limit=500, team_id=_tid)
         if not games:
             st.info("削除できる試合がまだありません。")
         else:
@@ -230,7 +233,7 @@ def run() -> None:
                     if st.button(f"本当に {len(selected_del)} 試合を削除する", key="db_admin_del_confirm", type="primary"):
                         deleted = 0
                         for idx in selected_del:
-                            game_repo.delete_game(games[idx][0])
+                            game_repo.delete_game(games[idx][0], owner_team_id=_tid)
                             deleted += 1
                         st.session_state.pop("del_selected", None)
                         st.success(f"{deleted} 試合を削除しました。")

@@ -289,7 +289,9 @@ if st.session_state.page_ctg == "start":
             idx = st.selectbox( "続きを行う試合を選択", range( len( opts ) ), format_func = lambda i: opts[ i ] )
             if st.button( "この試合を再開", type = "primary" ):
                 gid = games[ idx ][ 0 ]
-                st.session_state[ "all_list" ] = game_repo.get_play_list( gid )
+                st.session_state[ "all_list" ] = game_repo.get_play_list(
+                    gid, owner_team_id=st.session_state.get("logged_in_team_id")
+                )
                 st.session_state[ "current_game_id" ] = gid
                 st.session_state.page_ctg = "main"
                 st.session_state.game_start = "continue"
@@ -640,7 +642,7 @@ elif st.session_state.page_ctg == "main":
             t = build_initial_temp_list()
             gid = st.session_state.get("current_game_id")
             if gid:
-                先攻, 後攻 = game_repo.get_game_teams(gid)
+                先攻, 後攻 = game_repo.get_game_teams(gid, owner_team_id=st.session_state.get("logged_in_team_id"))
                 if 先攻 and 後攻:
                     t[7], t[8] = 後攻, 先攻
             st.session_state.temp_list = t
