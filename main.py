@@ -7,10 +7,12 @@ from typing import Optional
 import pandas as pd
 import streamlit as st
 
+import auth as _auth
 import db_admin
 import main_page
 import member
 from db import game_repo, player_repo, schema
+from streamlit_cookies_controller import CookieController as _CookieController
 
 
 def init_session() -> None:
@@ -32,6 +34,7 @@ def ensure_db() -> None:
     if "db_inited" in st.session_state:
         return
     schema.init_db()
+    schema.migrate_add_team_password()
     try:
         player_repo.migrate_member_remember()
     except Exception:
@@ -45,6 +48,76 @@ def load_member_df_from_db() -> Optional[pd.DataFrame]:
     return pd.DataFrame( rows ) if rows else None
 
 
+# --- 認証ヘルパー ---
+
+def _set_auth_session(cookie_ctrl, team_id: int, team_name: str) -> None:
+    """session_state に認証情報をセットし、30日間有効な Cookie を発行して rerun。"""
+    st.session_state["logged_in_team_id"]   = team_id
+    st.session_state["logged_in_team_name"] = team_name
+    token = _auth.create_token(team_id, team_name)
+    cookie_ctrl.set(
+        _auth.COOKIE_NAME,
+        token,
+        max_age = _auth.TOKEN_DAYS * 24 * 3600,
+    )
+    st.rerun()
+
+
+def _logout(cookie_ctrl) -> None:
+    """Cookie を削除して session を初期化。"""
+    cookie_ctrl.remove(_auth.COOKIE_NAME)
+    for k in ["logged_in_team_id", "logged_in_team_name"]:
+        st.session_state.pop(k, None)
+    st.rerun()
+
+
+def _login_page(cookie_ctrl) -> None:
+    """ログインページを表示し、認証を処理する。"""
+    st.title("Tsukuba PSS")
+    st.divider()
+
+    teams = player_repo.list_teams()
+
+    # ── 初回セットアップ（チームが1件もない場合）──
+    if not teams:
+        st.info("初回セットアップ: チームを登録してからログインしてください。")
+        with st.expander("チームを新規登録", expanded=True):
+            new_team = st.text_input("チーム名", key="setup_team_name")
+            new_pw   = st.text_input("パスワード", type="password", key="setup_pw1")
+            new_pw2  = st.text_input("パスワード（確認）", type="password", key="setup_pw2")
+            if st.button("登録してログイン", type="primary", key="setup_register_btn"):
+                if not new_team.strip():
+                    st.error("チーム名を入力してください。")
+                elif new_pw != new_pw2:
+                    st.error("パスワードが一致しません。")
+                elif not new_pw:
+                    st.error("パスワードを設定してください。")
+                else:
+                    tid = player_repo.ensure_team(new_team.strip())
+                    player_repo.set_team_password(tid, _auth.hash_password(new_pw))
+                    _set_auth_session(cookie_ctrl, tid, new_team.strip())
+        return
+
+    # ── 通常ログイン ──
+    st.subheader("ログイン")
+    team_names = [t[1] for t in teams]
+    sel = st.selectbox("チームを選択", team_names, key="login_team_sel")
+    pw  = st.text_input("パスワード", type="password", key="login_pw")
+
+    c_btn, _ = st.columns([1, 3])
+    with c_btn:
+        if st.button("ログイン", type="primary", use_container_width=True, key="login_btn"):
+            tid = player_repo.get_team_id_by_name(sel)
+            ph  = player_repo.get_team_password_hash(tid)
+            if ph is None:
+                # パスワード未設定チームは暫定的に入室可（設定を促す）
+                _set_auth_session(cookie_ctrl, tid, sel)
+            elif _auth.check_password(pw, ph):
+                _set_auth_session(cookie_ctrl, tid, sel)
+            else:
+                st.error("パスワードが正しくありません。")
+
+
 # --- ページ設定・スタイル ---
 st.set_page_config( page_title = "Tsukuba PSS", page_icon = "assets/tsukuba_logo.png", layout = "wide" )
 st.markdown("""
@@ -54,8 +127,25 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-init_session()
 ensure_db()
+
+# ── Cookie コントローラー & 認証復元 ──
+_cookie_ctrl = _CookieController(key="tsukuba_pss_cm")
+
+if "logged_in_team_id" not in st.session_state:
+    _token = _cookie_ctrl.get(_auth.COOKIE_NAME)
+    if _token:
+        _payload = _auth.verify_token(_token)
+        if _payload:
+            st.session_state["logged_in_team_id"]   = _payload["team_id"]
+            st.session_state["logged_in_team_name"] = _payload["team_name"]
+
+# ── 未認証ならログインページを表示して停止 ──
+if "logged_in_team_id" not in st.session_state:
+    _login_page(_cookie_ctrl)
+    st.stop()
+
+init_session()
 
 page = st.session_state.get("page_ctg", "start")
 
@@ -76,11 +166,20 @@ if st.session_state.page_ctg == "start":
     else:
         st.warning( "⚠️ ローカル SQLite を使用中（Supabase に接続されていません）" )
 
+    # ── チーム表示 & ログアウト ──
+    _tc, _lc = st.columns([5, 1])
+    with _tc:
+        st.caption(f"👥 ログイン中: **{st.session_state.get('logged_in_team_name', '')}**")
+    with _lc:
+        if st.button("ログアウト", key="start_logout_btn"):
+            _logout(_cookie_ctrl)
+
     st.divider()
 
     # ── メインアクション ──
+    _logged_tid = st.session_state.get("logged_in_team_id")
     has_teams = bool( player_repo.list_teams() )
-    has_games = bool( game_repo.list_games() )
+    has_games = bool( game_repo.list_games( team_id = _logged_tid ) )
 
     col1, col2, col3 = st.columns( 3 )
     with col1:
@@ -109,7 +208,7 @@ if st.session_state.page_ctg == "start":
             st.rerun()
 
     if st.session_state.get( "pending_game_select" ):
-        games = game_repo.list_games()
+        games = game_repo.list_games( team_id = _logged_tid )
         if games:
             st.divider()
             st.caption( "試合を選んで「この試合を再開」を押すと、最後の入力行から再開できます。" )
@@ -365,6 +464,21 @@ if st.session_state.page_ctg == "start":
                         st.warning("有効な行がありません。背番号,名前,左右 の形式で入力してください。")
         else:
             st.info("先にチームを追加してください。")
+
+    with st.expander("🔑 パスワード変更"):
+        _pw1 = st.text_input("新しいパスワード",       type="password", key="pw_change_1")
+        _pw2 = st.text_input("新しいパスワード（確認）", type="password", key="pw_change_2")
+        if st.button("パスワードを変更", key="pw_change_btn"):
+            if not _pw1:
+                st.error("パスワードを入力してください。")
+            elif _pw1 != _pw2:
+                st.error("パスワードが一致しません。")
+            else:
+                player_repo.set_team_password(
+                    st.session_state["logged_in_team_id"],
+                    _auth.hash_password(_pw1),
+                )
+                st.success("パスワードを変更しました。次回ログイン時から有効です。")
 
 elif st.session_state.page_ctg == "member":
     if member_df is None:

@@ -168,18 +168,29 @@ def get_game(game_id):
     return row
 
 
-def list_games(limit: int = 100) -> List[Tuple[Any, ...]]:
-    """Return list of games (newest first), each row (id, 試合日時, Season, Kind, 先攻, 後攻)."""
+def list_games(limit: int = 100, team_id: Optional[int] = None) -> List[Tuple[Any, ...]]:
+    """Return list of games (newest first). If team_id given, only games that team played in."""
     conn = schema.get_conn()
     c = conn.cursor()
-    c.execute('''
-        SELECT g.id, g.試合日時, g.Season, g.Kind, t1.名前 AS 先攻, t2.名前 AS 後攻
-        FROM game g
-        JOIN team t1 ON g.先攻チーム_id = t1.id
-        JOIN team t2 ON g.後攻チーム_id = t2.id
-        ORDER BY g.id DESC
-        LIMIT ?
-    ''', (limit,))
+    if team_id is not None:
+        c.execute('''
+            SELECT g.id, g.試合日時, g.Season, g.Kind, t1.名前 AS 先攻, t2.名前 AS 後攻
+            FROM game g
+            JOIN team t1 ON g.先攻チーム_id = t1.id
+            JOIN team t2 ON g.後攻チーム_id = t2.id
+            WHERE g.先攻チーム_id = ? OR g.後攻チーム_id = ?
+            ORDER BY g.id DESC
+            LIMIT ?
+        ''', (team_id, team_id, limit))
+    else:
+        c.execute('''
+            SELECT g.id, g.試合日時, g.Season, g.Kind, t1.名前 AS 先攻, t2.名前 AS 後攻
+            FROM game g
+            JOIN team t1 ON g.先攻チーム_id = t1.id
+            JOIN team t2 ON g.後攻チーム_id = t2.id
+            ORDER BY g.id DESC
+            LIMIT ?
+        ''', (limit,))
     rows = c.fetchall()
     conn.close()
     return rows

@@ -201,6 +201,25 @@ def save_stamem_by_team_name(チーム名: str, poses: list, names: list, nums: 
     save_stamem(tid, poses, names, nums, lrs)
 
 
+def get_team_password_hash(team_id: int) -> Optional[str]:
+    """Return password_hash for the team, or None if not set."""
+    conn = schema.get_conn()
+    c = conn.cursor()
+    c.execute("SELECT password_hash FROM team WHERE id = ?", (team_id,))
+    row = c.fetchone()
+    conn.close()
+    return row[0] if row and row[0] else None
+
+
+def set_team_password(team_id: int, password_hash: str) -> None:
+    """Set (or update) password_hash for the team."""
+    conn = schema.get_conn()
+    c = conn.cursor()
+    c.execute("UPDATE team SET password_hash = ? WHERE id = ?", (password_hash, team_id))
+    conn.commit()
+    conn.close()
+
+
 def get_all_players_with_team() -> list:
     """Return all players with team name in one JOIN query (list of dicts)."""
     conn = schema.get_conn()

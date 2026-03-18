@@ -162,6 +162,25 @@ def get_conn() -> Union[sqlite3.Connection, _PgConnWrapper]:
     return sqlite3.connect(DB_FILE)
 
 
+def migrate_add_team_password() -> None:
+    """Add password_hash column to team table if missing (SQLite & PostgreSQL)."""
+    conn = get_conn()
+    c = conn.cursor()
+    try:
+        if is_postgres():
+            c.execute("ALTER TABLE team ADD COLUMN IF NOT EXISTS password_hash TEXT")
+        else:
+            c.execute("PRAGMA table_info(team)")
+            cols = [row[1] for row in c.fetchall()]
+            if "password_hash" not in cols:
+                c.execute("ALTER TABLE team ADD COLUMN password_hash TEXT")
+        conn.commit()
+    except Exception:
+        pass
+    finally:
+        conn.close()
+
+
 def init_db() -> None:
     """Create all tables if they do not exist (SQLite only). For PostgreSQL, run db/supabase_schema.sql once in Supabase."""
     if is_postgres():
