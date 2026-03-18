@@ -37,12 +37,16 @@ def ensure_db() -> None:
     schema.migrate_add_team_password()
     schema.migrate_add_game_owner()
     schema.migrate_associate_existing_games("トヨタ自動車東日本")
-    # トヨタ自動車東日本のパスワードが未設定なら初期設定
+    # 各チームのパスワードが未設定なら初期設定
     try:
-        _toyota_id = player_repo.ensure_team("トヨタ自動車東日本")
-        if player_repo.get_team_password_hash(_toyota_id) is None:
-            import auth as _a
-            player_repo.set_team_password(_toyota_id, _a.hash_password("iiokataisei"))
+        import auth as _a
+        for _team_name, _team_pw in [
+            ("トヨタ自動車東日本", "iiokataisei"),
+            ("筑波大学",           "tkashikawamura"),
+        ]:
+            _tid = player_repo.ensure_team(_team_name)
+            if player_repo.get_team_password_hash(_tid) is None:
+                player_repo.set_team_password(_tid, _a.hash_password(_team_pw))
     except Exception:
         pass
     try:
@@ -83,7 +87,6 @@ def _logout(cookie_ctrl) -> None:
 
 def _login_page(cookie_ctrl) -> None:
     """ログインページを表示し、認証を処理する。"""
-    st.title("Tsukuba PSS")
     st.divider()
 
     # ── ログイン ──
