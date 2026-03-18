@@ -1,9 +1,11 @@
 services:
   - type: web
     name: tsukuba-pss
-    runtime: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: streamlit run main.py --server.port $PORT --server.address 0.0.0.0 --server.headless true
+    runtime: docker
     envVars:
       - key: DATABASE_URL
+        sync: false
+      - key: BASIC_AUTH_USERS
+        sync: false
+      - key: JWT_SECRET_KEY
         sync: false

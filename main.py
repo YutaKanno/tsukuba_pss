@@ -72,8 +72,24 @@ def load_member_df_from_db() -> Optional[pd.DataFrame]:
 
 # --- 認証ヘルパー ---
 
+def _get_basic_auth_user() -> Optional[str]:
+    """
+    Nginx が付与する X-Remote-User ヘッダーからチーム名を取得する（本番）。
+    ヘッダーがない場合は DEV_USER 環境変数にフォールバック（ローカル開発用）。
+    """
+    import os
+    try:
+        # st.context.headers は Streamlit >= 1.37.0 で利用可能
+        user = st.context.headers.get("x-remote-user") or st.context.headers.get("X-Remote-User")
+        if user and user.strip():
+            return user.strip()
+    except Exception:
+        pass
+    return os.environ.get("DEV_USER", "").strip() or None
+
+
 def _set_auth_session(cookie_ctrl, team_id: int, team_name: str) -> None:
-    """session_state に認証情報をセットし、Cookie を発行して rerun。"""
+    """session_state に認証情報をセット（Cookie フォールバック用）。"""
     st.session_state["logged_in_team_id"]   = team_id
     st.session_state["logged_in_team_name"] = team_name
     token = _auth.create_token(team_id, team_name)
@@ -89,7 +105,7 @@ def _set_auth_session(cookie_ctrl, team_id: int, team_name: str) -> None:
 
 
 def _logout(cookie_ctrl) -> None:
-    """Cookie を削除して session を初期化。"""
+    """Cookie を削除して session を初期化（ローカル開発用）。"""
     try:
         cookie_ctrl.delete(_auth.COOKIE_NAME)
     except Exception:
@@ -100,7 +116,7 @@ def _logout(cookie_ctrl) -> None:
 
 
 def _login_page(cookie_ctrl) -> None:
-    """ログインページを表示する。ユーザー名＝チーム名、パスワード＝チームパスワード。"""
+    """フォールバック用ログインページ（ローカル開発・Nginx なし環境）。"""
     st.divider()
     st.subheader("ログイン")
     uname = st.text_input("ユーザー名（チーム名）", key="login_username")
@@ -132,24 +148,34 @@ st.markdown("""
 
 ensure_db()
 
-# ── Cookie コントローラー & 認証復元 ──
-# get_all() が None のとき JS がまだ実行されていない（初回レンダリング）。
-# その場合は st.stop() で待機し、JS 実行後の自動 rerun で cookie を取得する。
+# ── 認証: Basic Auth (Nginx) → Cookie フォールバック ──
 _cookie_ctrl = _stx.CookieManager(key="tsukuba_pss_cm")
 
 if "logged_in_team_id" not in st.session_state:
-    _all_cookies = _cookie_ctrl.get_all()
-    if _all_cookies is None:
-        # JS未実行 → コンポーネントが値を返したら自動で rerun される
-        st.stop()
-    _token = _all_cookies.get(_auth.COOKIE_NAME) if _all_cookies else None
-    if _token:
-        _payload = _auth.verify_token(_token)
-        if _payload:
-            st.session_state["logged_in_team_id"]   = _payload["team_id"]
-            st.session_state["logged_in_team_name"] = _payload["team_name"]
+    # 1) 本番: Nginx が付与した X-Remote-User ヘッダーを使用
+    _basic_user = _get_basic_auth_user()
+    if _basic_user:
+        _tid = player_repo.get_team_id_by_name(_basic_user)
+        if _tid:
+            st.session_state["logged_in_team_id"]   = _tid
+            st.session_state["logged_in_team_name"] = _basic_user
+        else:
+            st.error(f"チーム「{_basic_user}」がDBに存在しません。管理者に連絡してください。")
+            st.stop()
 
-# ── 未認証ならログインページを表示して停止 ──
+    # 2) ローカル開発: Cookie フォールバック
+    if "logged_in_team_id" not in st.session_state:
+        _all_cookies = _cookie_ctrl.get_all()
+        if _all_cookies is None:
+            st.stop()  # JS未実行 → コンポーネントが値を返したら自動 rerun
+        _token = _all_cookies.get(_auth.COOKIE_NAME) if _all_cookies else None
+        if _token:
+            _payload = _auth.verify_token(_token)
+            if _payload:
+                st.session_state["logged_in_team_id"]   = _payload["team_id"]
+                st.session_state["logged_in_team_name"] = _payload["team_name"]
+
+# ── 未認証ならログインページを表示して停止（ローカル開発用フォールバック）──
 if "logged_in_team_id" not in st.session_state:
     _login_page(_cookie_ctrl)
     st.stop()
@@ -180,8 +206,20 @@ if st.session_state.page_ctg == "start":
     with _tc:
         st.caption(f"👥 ログイン中: **{st.session_state.get('logged_in_team_name', '')}**")
     with _lc:
-        if st.button("ログアウト", key="start_logout_btn"):
-            _logout(_cookie_ctrl)
+        if _get_basic_auth_user():
+            # Basic Auth 使用時: ブラウザのキャッシュをクリアする JS を実行
+            if st.button("ログアウト", key="start_logout_btn"):
+                import streamlit.components.v1 as _components
+                _components.html(
+                    "<script>document.execCommand('ClearAuthenticationCache',false);"
+                    "fetch(window.location.href,{headers:{Authorization:'Basic invalid'}}).catch(()=>{});"
+                    ".then(()=>window.location.reload()).catch(()=>window.location.reload());"
+                    "</script>",
+                    height=0,
+                )
+        else:
+            if st.button("ログアウト", key="start_logout_btn"):
+                _logout(_cookie_ctrl)
 
     st.divider()
 
