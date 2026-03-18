@@ -154,6 +154,9 @@ st.markdown("""
 ensure_db()
 
 # ── Cookie コントローラー & 認証復元 ──
+# extra-streamlit-components の CookieManager は非同期で動作するため、
+# 初回レンダリング時は JS がまだ実行されておらず .get() が None を返す。
+# _cookie_load_done フラグで「2回目のレンダリングまで待つ」ようにする。
 _cookie_ctrl = _stx.CookieManager(key="tsukuba_pss_cm")
 
 if "logged_in_team_id" not in st.session_state:
@@ -163,6 +166,11 @@ if "logged_in_team_id" not in st.session_state:
         if _payload:
             st.session_state["logged_in_team_id"]   = _payload["team_id"]
             st.session_state["logged_in_team_name"] = _payload["team_name"]
+    elif not st.session_state.get("_cookie_load_done"):
+        # 初回レンダリング: JS がまだクッキーを読み込んでいない可能性があるため
+        # フラグをセットして再レンダリングし、2回目でクッキー値を取得する
+        st.session_state["_cookie_load_done"] = True
+        st.rerun()
 
 # ── 未認証ならログインページを表示して停止 ──
 if "logged_in_team_id" not in st.session_state:
