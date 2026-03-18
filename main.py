@@ -90,6 +90,8 @@ def _get_basic_auth_user() -> Optional[str]:
 
 def _set_auth_session(cookie_ctrl, team_id: int, team_name: str) -> None:
     """session_state に認証情報をセット（Cookie フォールバック用）。"""
+    # ログアウトフラグを解除してから新しい認証情報をセット
+    st.session_state.pop("_logged_out", None)
     st.session_state["logged_in_team_id"]   = team_id
     st.session_state["logged_in_team_name"] = team_name
     token = _auth.create_token(team_id, team_name)
@@ -105,13 +107,18 @@ def _set_auth_session(cookie_ctrl, team_id: int, team_name: str) -> None:
 
 
 def _logout(cookie_ctrl) -> None:
-    """Cookie を削除して session を初期化（ローカル開発用）。"""
+    """セッションを完全クリアし、Cookie 復元を防ぐフラグをセット。"""
     try:
         cookie_ctrl.delete(_auth.COOKIE_NAME)
     except Exception:
         pass
-    for k in ["logged_in_team_id", "logged_in_team_name"]:
-        st.session_state.pop(k, None)
+    # db_inited だけ残して全セッションをクリア
+    _db_inited = st.session_state.get("db_inited")
+    st.session_state.clear()
+    if _db_inited:
+        st.session_state["db_inited"] = _db_inited
+    # このフラグがある間は Cookie からの自動復元を行わない
+    st.session_state["_logged_out"] = True
     st.rerun()
 
 
@@ -190,7 +197,8 @@ if "logged_in_team_id" not in st.session_state:
             st.stop()
 
     # 2) ローカル開発: Cookie フォールバック
-    if "logged_in_team_id" not in st.session_state:
+    # _logged_out フラグがある場合は Cookie 復元をスキップ（ログアウト直後の再ログインを正しく動作させる）
+    if "logged_in_team_id" not in st.session_state and not st.session_state.get("_logged_out"):
         _all_cookies = _cookie_ctrl.get_all()
         if _all_cookies is None:
             st.stop()  # JS未実行 → コンポーネントが値を返したら自動 rerun
