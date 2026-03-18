@@ -213,6 +213,25 @@ def migrate_associate_existing_games(team_name: str) -> int:
     return count
 
 
+def migrate_reassociate_games_by_team(team_name: str) -> int:
+    """先攻または後攻が team_name のゲームを、そのチームのオーナーに再紐づけする。登録件数を返す。"""
+    from . import player_repo as _pr
+    team_id = _pr.get_team_id_by_name(team_name)
+    if team_id is None:
+        return 0
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute(
+        "UPDATE game SET owner_team_id = ? "
+        "WHERE (先攻チーム_id = ? OR 後攻チーム_id = ?)",
+        (team_id, team_id, team_id),
+    )
+    count = c.rowcount if c.rowcount and c.rowcount > 0 else 0
+    conn.commit()
+    conn.close()
+    return count
+
+
 def init_db() -> None:
     """Create all tables if they do not exist (SQLite only). For PostgreSQL, run db/supabase_schema.sql once in Supabase."""
     if is_postgres():
