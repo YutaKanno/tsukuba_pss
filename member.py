@@ -353,6 +353,7 @@ def member_page( member_df, top_poses, top_names, top_nums, top_lrs, bottom_pose
                         Week=str(st.session_state.get("game_Week") or ""),
                         Day=str(st.session_state.get("game_Day") or ""),
                         GameNumber=str(st.session_state.get("game_GameNumber") or ""),
+                        owner_team_id=st.session_state.get("logged_in_team_id"),
                     )
                     st.session_state["current_game_id"] = gid
                     st.session_state["all_list"] = []

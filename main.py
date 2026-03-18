@@ -35,6 +35,8 @@ def ensure_db() -> None:
         return
     schema.init_db()
     schema.migrate_add_team_password()
+    schema.migrate_add_game_owner()
+    schema.migrate_associate_existing_games("トヨタ自動車東日本")
     try:
         player_repo.migrate_member_remember()
     except Exception:

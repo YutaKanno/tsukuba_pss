@@ -181,6 +181,38 @@ def migrate_add_team_password() -> None:
         conn.close()
 
 
+def migrate_add_game_owner() -> None:
+    """Add owner_team_id column to game table if missing."""
+    conn = get_conn()
+    c = conn.cursor()
+    try:
+        if is_postgres():
+            c.execute("ALTER TABLE game ADD COLUMN IF NOT EXISTS owner_team_id INTEGER REFERENCES team(id)")
+        else:
+            c.execute("PRAGMA table_info(game)")
+            cols = [row[1] for row in c.fetchall()]
+            if "owner_team_id" not in cols:
+                c.execute("ALTER TABLE game ADD COLUMN owner_team_id INTEGER REFERENCES team(id)")
+        conn.commit()
+    except Exception:
+        pass
+    finally:
+        conn.close()
+
+
+def migrate_associate_existing_games(team_name: str) -> int:
+    """owner_team_id が未設定の既存ゲームを指定チームに紐づける。登録件数を返す。"""
+    from . import player_repo as _pr
+    team_id = _pr.ensure_team(team_name)
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("UPDATE game SET owner_team_id = ? WHERE owner_team_id IS NULL", (team_id,))
+    count = c.rowcount if c.rowcount and c.rowcount > 0 else 0
+    conn.commit()
+    conn.close()
+    return count
+
+
 def init_db() -> None:
     """Create all tables if they do not exist (SQLite only). For PostgreSQL, run db/supabase_schema.sql once in Supabase."""
     if is_postgres():
@@ -233,6 +265,7 @@ def init_db() -> None:
             主審 TEXT,
             先攻チーム_id INTEGER NOT NULL REFERENCES team(id),
             後攻チーム_id INTEGER NOT NULL REFERENCES team(id),
+            owner_team_id INTEGER REFERENCES team(id),
             開始時刻 TEXT,
             現在時刻 TEXT,
             経過時間 TEXT,

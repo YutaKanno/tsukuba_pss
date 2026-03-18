@@ -121,6 +121,7 @@ def create_game(
     Week: str = '',
     Day: str = '',
     GameNumber: str = '',
+    owner_team_id: Optional[int] = None,
 ) -> int:
     """Create a new game and return game_id; ensure teams exist."""
     from . import player_repo
@@ -129,9 +130,9 @@ def create_game(
     conn = schema.get_conn()
     c = conn.cursor()
     c.execute('''
-        INSERT INTO game (試合日時, Season, Kind, Week, Day, GameNumber, 主審, 先攻チーム_id, 後攻チーム_id, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (試合日時, Season, Kind, Week, Day, GameNumber, 主審, top_id, bottom_id, datetime.now().isoformat()))
+        INSERT INTO game (試合日時, Season, Kind, Week, Day, GameNumber, 主審, 先攻チーム_id, 後攻チーム_id, owner_team_id, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (試合日時, Season, Kind, Week, Day, GameNumber, 主審, top_id, bottom_id, owner_team_id, datetime.now().isoformat()))
     gid = c.lastrowid
     conn.commit()
     conn.close()
@@ -169,7 +170,7 @@ def get_game(game_id):
 
 
 def list_games(limit: int = 100, team_id: Optional[int] = None) -> List[Tuple[Any, ...]]:
-    """Return list of games (newest first). If team_id given, only games that team played in."""
+    """Return list of games (newest first). If team_id given, only games owned by that team."""
     conn = schema.get_conn()
     c = conn.cursor()
     if team_id is not None:
@@ -178,10 +179,10 @@ def list_games(limit: int = 100, team_id: Optional[int] = None) -> List[Tuple[An
             FROM game g
             JOIN team t1 ON g.先攻チーム_id = t1.id
             JOIN team t2 ON g.後攻チーム_id = t2.id
-            WHERE g.先攻チーム_id = ? OR g.後攻チーム_id = ?
+            WHERE g.owner_team_id = ?
             ORDER BY g.id DESC
             LIMIT ?
-        ''', (team_id, team_id, limit))
+        ''', (team_id, limit))
     else:
         c.execute('''
             SELECT g.id, g.試合日時, g.Season, g.Kind, t1.名前 AS 先攻, t2.名前 AS 後攻
