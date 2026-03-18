@@ -162,6 +162,38 @@ def get_conn() -> Union[sqlite3.Connection, _PgConnWrapper]:
     return sqlite3.connect(DB_FILE)
 
 
+def migrate_add_user_account() -> None:
+    """Create user_account table if it doesn't exist (SQLite & PostgreSQL)."""
+    conn = get_conn()
+    c = conn.cursor()
+    try:
+        if is_postgres():
+            c.execute('''
+                CREATE TABLE IF NOT EXISTS user_account (
+                    id SERIAL PRIMARY KEY,
+                    username TEXT UNIQUE NOT NULL,
+                    password_hash TEXT NOT NULL,
+                    team_id INTEGER NOT NULL REFERENCES team(id),
+                    created_at TEXT
+                )
+            ''')
+        else:
+            c.execute('''
+                CREATE TABLE IF NOT EXISTS user_account (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT UNIQUE NOT NULL,
+                    password_hash TEXT NOT NULL,
+                    team_id INTEGER NOT NULL REFERENCES team(id),
+                    created_at TEXT
+                )
+            ''')
+        conn.commit()
+    except Exception:
+        pass
+    finally:
+        conn.close()
+
+
 def migrate_add_team_password() -> None:
     """Add password_hash column to team table if missing (SQLite & PostgreSQL)."""
     conn = get_conn()
@@ -317,6 +349,17 @@ def init_db() -> None:
         'top_score TEXT', 'bottom_score TEXT'
     ]
     c.execute('CREATE TABLE IF NOT EXISTS play_data (\n  ' + ',\n  '.join(data_columns) + '\n)')
+
+    # ユーザーアカウント（ユーザー名・パスワード・所属チーム）
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS user_account (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            team_id INTEGER NOT NULL REFERENCES team(id),
+            created_at TEXT
+        )
+    ''')
 
     conn.commit()
     conn.close()

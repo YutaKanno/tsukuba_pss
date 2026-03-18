@@ -11,7 +11,7 @@ import auth as _auth
 import db_admin
 import main_page
 import member
-from db import game_repo, player_repo, schema
+from db import game_repo, player_repo, schema, user_repo
 import extra_streamlit_components as _stx
 
 
@@ -36,6 +36,7 @@ def ensure_db() -> None:
     schema.init_db()
     schema.migrate_add_team_password()
     schema.migrate_add_game_owner()
+    schema.migrate_add_user_account()
     schema.migrate_associate_existing_games("トヨタ自動車東日本")
     schema.migrate_reassociate_games_by_team("筑波大学")
     # 環境変数 INITIAL_TEAM_PASSWORDS (JSON) からチームとパスワードを設定
@@ -71,75 +72,90 @@ def load_member_df_from_db() -> Optional[pd.DataFrame]:
 
 # --- 認証ヘルパー ---
 
-def _set_auth_session(cookie_ctrl, team_id: int, team_name: str) -> None:
-    """session_state に認証情報をセットし、30日間有効な Cookie を発行して rerun。"""
+def _set_auth_session(cookie_ctrl, user_id: int, username: str,
+                      team_id: int, team_name: str) -> None:
+    """session_state に認証情報をセットし、Cookie を発行して rerun。"""
+    st.session_state["logged_in_user_id"]   = user_id
+    st.session_state["logged_in_username"]  = username
     st.session_state["logged_in_team_id"]   = team_id
     st.session_state["logged_in_team_name"] = team_name
-    token = _auth.create_token(team_id, team_name)
-    cookie_ctrl.set(
-        _auth.COOKIE_NAME,
-        token,
-        expires_at=datetime.now() + timedelta(days=_auth.TOKEN_DAYS),
-    )
+    token = _auth.create_token(team_id, team_name, user_id, username)
+    try:
+        cookie_ctrl.set(
+            _auth.COOKIE_NAME,
+            token,
+            expires_at=datetime.now() + timedelta(days=_auth.TOKEN_DAYS),
+        )
+    except Exception:
+        pass
     st.rerun()
 
 
 def _logout(cookie_ctrl) -> None:
     """Cookie を削除して session を初期化。"""
-    cookie_ctrl.delete(_auth.COOKIE_NAME)
-    for k in ["logged_in_team_id", "logged_in_team_name"]:
+    try:
+        cookie_ctrl.delete(_auth.COOKIE_NAME)
+    except Exception:
+        pass
+    for k in ["logged_in_user_id", "logged_in_username", "logged_in_team_id", "logged_in_team_name"]:
         st.session_state.pop(k, None)
     st.rerun()
 
 
 def _login_page(cookie_ctrl) -> None:
-    """ログインページを表示し、認証を処理する。"""
+    """ログイン / アカウント登録ページを表示する。"""
     st.divider()
+
+    tab_login, tab_register = st.tabs(["🔑 ログイン", "📝 アカウント登録"])
 
     # ── ログイン ──
-    st.subheader("ログイン")
-    teams = player_repo.list_teams_with_password()
-    team_names = [t[1] for t in teams] if teams else []
-
-    if not team_names:
-        st.info("チームがまだ登録されていません。下の「新規チーム追加」から登録してください。")
-    else:
-        sel = st.selectbox("チームを選択", team_names, key="login_team_sel")
-        pw  = st.text_input("パスワード", type="password", key="login_pw")
-        c_btn, _ = st.columns([1, 3])
-        with c_btn:
-            if st.button("ログイン", type="primary", use_container_width=True, key="login_btn"):
-                tid = player_repo.get_team_id_by_name(sel)
-                ph  = player_repo.get_team_password_hash(tid)
-                if ph is None:
-                    st.error("このチームのパスワードが設定されていません。管理者に問い合わせてください。")
-                elif _auth.check_password(pw, ph):
-                    _set_auth_session(cookie_ctrl, tid, sel)
-                else:
-                    st.error("パスワードが正しくありません。")
-
-    st.divider()
-
-    # ── 新規チーム追加 ──
-    with st.expander("新規チーム追加"):
-        new_team = st.text_input("チーム名", key="new_team_name")
-        new_pw1  = st.text_input("パスワード", type="password", key="new_team_pw1")
-        new_pw2  = st.text_input("パスワード（確認）", type="password", key="new_team_pw2")
-        if st.button("チームを登録", type="primary", key="new_team_btn"):
-            name = new_team.strip()
-            if not name:
-                st.error("チーム名を入力してください。")
-            elif not new_pw1:
-                st.error("パスワードを入力してください。")
-            elif new_pw1 != new_pw2:
-                st.error("パスワードが一致しません。")
-            elif player_repo.get_team_id_by_name(name) is not None:
-                st.error("そのチーム名はすでに登録されています。")
+    with tab_login:
+        uname = st.text_input("ユーザー名", key="login_username")
+        pw    = st.text_input("パスワード", type="password", key="login_pw")
+        if st.button("ログイン", type="primary", key="login_btn"):
+            if not uname.strip():
+                st.error("ユーザー名を入力してください。")
             else:
-                tid = player_repo.ensure_team(name)
-                player_repo.set_team_password(tid, _auth.hash_password(new_pw1))
-                st.success(f"「{name}」を登録しました。ログインしてください。")
-                st.rerun()
+                u = user_repo.get_user_by_username(uname)
+                if u is None or not _auth.check_password(pw, u[2]):
+                    st.error("ユーザー名またはパスワードが正しくありません。")
+                else:
+                    tname = player_repo.get_team_name_by_id(u[3]) or ""
+                    _set_auth_session(cookie_ctrl, u[0], u[1], u[3], tname)
+
+    # ── アカウント登録 ──
+    with tab_register:
+        st.caption("所属チームのチームパスワードを知っているメンバーが登録できます。")
+        reg_uname = st.text_input("ユーザー名（半角英数字推奨）", key="reg_username")
+        reg_pw1   = st.text_input("パスワード", type="password", key="reg_pw1")
+        reg_pw2   = st.text_input("パスワード（確認）", type="password", key="reg_pw2")
+        st.divider()
+        teams_with_pw = player_repo.list_teams_with_password()
+        if not teams_with_pw:
+            st.info("登録可能なチームがありません。管理者にチームを登録してもらってください。")
+        else:
+            team_opts = [t[1] for t in teams_with_pw]
+            reg_team  = st.selectbox("所属チーム", team_opts, key="reg_team_sel")
+            reg_tpw   = st.text_input("チームパスワード", type="password", key="reg_team_pw")
+            if st.button("アカウントを登録", type="primary", key="reg_btn"):
+                uname_s = reg_uname.strip()
+                if not uname_s:
+                    st.error("ユーザー名を入力してください。")
+                elif not reg_pw1:
+                    st.error("パスワードを入力してください。")
+                elif reg_pw1 != reg_pw2:
+                    st.error("パスワードが一致しません。")
+                elif user_repo.username_exists(uname_s):
+                    st.error("そのユーザー名は既に使われています。別の名前を入力してください。")
+                else:
+                    tid = player_repo.get_team_id_by_name(reg_team)
+                    ph  = player_repo.get_team_password_hash(tid)
+                    if ph is None or not _auth.check_password(reg_tpw, ph):
+                        st.error("チームパスワードが正しくありません。")
+                    else:
+                        uid = user_repo.create_user(uname_s, _auth.hash_password(reg_pw1), tid)
+                        st.success(f"アカウント「{uname_s}」を登録しました。ログインタブからログインしてください。")
+                        st.rerun()
 
 
 # --- ページ設定・スタイル ---
@@ -154,26 +170,26 @@ st.markdown("""
 ensure_db()
 
 # ── Cookie コントローラー & 認証復元 ──
-# extra-streamlit-components の CookieManager は非同期で動作するため、
-# 初回レンダリング時は JS がまだ実行されておらず .get() が None を返す。
-# _cookie_load_done フラグで「2回目のレンダリングまで待つ」ようにする。
+# get_all() が None のとき JS がまだ実行されていない（初回レンダリング）。
+# その場合は st.stop() で待機し、JS 実行後の自動 rerun で cookie を取得する。
 _cookie_ctrl = _stx.CookieManager(key="tsukuba_pss_cm")
 
-if "logged_in_team_id" not in st.session_state:
-    _token = _cookie_ctrl.get(_auth.COOKIE_NAME)
+if "logged_in_user_id" not in st.session_state:
+    _all_cookies = _cookie_ctrl.get_all()
+    if _all_cookies is None:
+        # JS未実行 → コンポーネントが値を返したら自動で rerun される
+        st.stop()
+    _token = _all_cookies.get(_auth.COOKIE_NAME) if _all_cookies else None
     if _token:
         _payload = _auth.verify_token(_token)
         if _payload:
+            st.session_state["logged_in_user_id"]   = _payload.get("user_id")
+            st.session_state["logged_in_username"]  = _payload.get("username", "")
             st.session_state["logged_in_team_id"]   = _payload["team_id"]
             st.session_state["logged_in_team_name"] = _payload["team_name"]
-    elif not st.session_state.get("_cookie_load_done"):
-        # 初回レンダリング: JS がまだクッキーを読み込んでいない可能性があるため
-        # フラグをセットして再レンダリングし、2回目でクッキー値を取得する
-        st.session_state["_cookie_load_done"] = True
-        st.rerun()
 
 # ── 未認証ならログインページを表示して停止 ──
-if "logged_in_team_id" not in st.session_state:
+if "logged_in_user_id" not in st.session_state:
     _login_page(_cookie_ctrl)
     st.stop()
 
@@ -201,7 +217,9 @@ if st.session_state.page_ctg == "start":
     # ── チーム表示 & ログアウト ──
     _tc, _lc = st.columns([5, 1])
     with _tc:
-        st.caption(f"👥 ログイン中: **{st.session_state.get('logged_in_team_name', '')}**")
+        _uname_disp = st.session_state.get('logged_in_username', '')
+        _tname_disp = st.session_state.get('logged_in_team_name', '')
+        st.caption(f"👤 **{_uname_disp}**（{_tname_disp}）")
     with _lc:
         if st.button("ログアウト", key="start_logout_btn"):
             _logout(_cookie_ctrl)
@@ -515,8 +533,8 @@ if st.session_state.page_ctg == "start":
             elif _pw1 != _pw2:
                 st.error("パスワードが一致しません。")
             else:
-                player_repo.set_team_password(
-                    st.session_state["logged_in_team_id"],
+                user_repo.update_password(
+                    st.session_state["logged_in_user_id"],
                     _auth.hash_password(_pw1),
                 )
                 st.success("パスワードを変更しました。次回ログイン時から有効です。")

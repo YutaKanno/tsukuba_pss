@@ -33,13 +33,18 @@ def check_password(password: str, hashed: str) -> bool:
         return False
 
 
-def create_token(team_id: int, team_name: str) -> str:
+def create_token(team_id: int, team_name: str,
+                 user_id: Optional[int] = None, username: Optional[str] = None) -> str:
     import jwt
     payload = {
         "team_id":   team_id,
         "team_name": team_name,
         "exp": datetime.datetime.utcnow() + datetime.timedelta(days=TOKEN_DAYS),
     }
+    if user_id is not None:
+        payload["user_id"] = user_id
+    if username is not None:
+        payload["username"] = username
     return jwt.encode(payload, _secret(), algorithm="HS256")
 
 

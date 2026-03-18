@@ -34,6 +34,16 @@ def list_teams() -> List[Tuple[int, str]]:
     return rows
 
 
+def get_team_name_by_id(team_id: int) -> Optional[str]:
+    """Return team name by id, or None."""
+    conn = schema.get_conn()
+    c = conn.cursor()
+    c.execute('SELECT 名前 FROM team WHERE id = ?', (team_id,))
+    row = c.fetchone()
+    conn.close()
+    return row[0] if row else None
+
+
 def get_team_id_by_name(名前: str) -> Optional[int]:
     """Return team id by name, or None."""
     conn = schema.get_conn()

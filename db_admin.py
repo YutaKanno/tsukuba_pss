@@ -8,7 +8,7 @@ import pandas as pd
 import streamlit as st
 
 from config import COLUMN_NAMES
-from db import game_repo, player_repo, schema
+from db import game_repo, player_repo, schema, user_repo
 
 
 def _get_admin_password() -> str:
@@ -46,8 +46,8 @@ def run() -> None:
             st.session_state.pop("db_admin_authenticated", None)
             st.rerun()
 
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
-        "チーム一覧", "選手一覧", "スタメン", "試合一覧", "試合をCSVで保存", "試合削除", "選手削除"
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
+        "チーム一覧", "選手一覧", "スタメン", "試合一覧", "試合をCSVで保存", "試合削除", "選手削除", "ユーザー管理"
     ])
 
     with tab1:
@@ -292,6 +292,36 @@ def run() -> None:
                                 if st.button("キャンセル", key="db_admin_del_player_cancel"):
                                     st.session_state.pop("del_player_selected", None)
                                     st.rerun()
+
+    with tab8:
+        st.subheader("ユーザー管理")
+        teams = player_repo.list_teams()
+        if not teams:
+            st.info("チームがまだ登録されていません。")
+        else:
+            team_names = [t[1] for t in teams]
+            sel_ut = st.selectbox("チームを選択", team_names, key="db_admin_user_team_sel")
+            if sel_ut:
+                tid = player_repo.get_team_id_by_name(sel_ut)
+                if tid is not None:
+                    users = user_repo.list_users_by_team(tid)
+                    if not users:
+                        st.info("このチームにユーザーが登録されていません。")
+                    else:
+                        df_users = pd.DataFrame(users, columns=["id", "ユーザー名", "登録日時"])
+                        st.dataframe(df_users[["ユーザー名", "登録日時"]], use_container_width=True)
+                        st.caption(f"計 {len(users)} ユーザー")
+
+                        st.divider()
+                        st.write("**ユーザーを削除**")
+                        user_opts = [u[1] for u in users]
+                        del_uname = st.selectbox("削除するユーザー", user_opts, key="db_admin_del_user_sel")
+                        if st.button("このユーザーを削除", key="db_admin_del_user_btn", type="primary"):
+                            target = next((u for u in users if u[1] == del_uname), None)
+                            if target:
+                                user_repo.delete_user(target[0])
+                                st.success(f"ユーザー「{del_uname}」を削除しました。")
+                                st.rerun()
 
     st.write("---")
     if st.button("スタート画面に戻る"):
