@@ -46,8 +46,8 @@ def run() -> None:
             st.session_state.pop("db_admin_authenticated", None)
             st.rerun()
 
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-        "チーム一覧", "選手一覧", "スタメン", "試合一覧", "試合をCSVで保存", "試合削除"
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+        "チーム一覧", "選手一覧", "スタメン", "試合一覧", "試合をCSVで保存", "試合削除", "選手削除"
     ])
 
     with tab1:
@@ -239,6 +239,59 @@ def run() -> None:
                     if st.button("キャンセル", key="db_admin_del_cancel"):
                         st.session_state.pop("del_selected", None)
                         st.rerun()
+
+    with tab7:
+        st.subheader("選手削除")
+        teams = player_repo.list_teams()
+        if not teams:
+            st.info("チームがまだ登録されていません。")
+        else:
+            team_names = [t[1] for t in teams]
+            sel_team = st.selectbox("チームを選択", team_names, key="db_admin_del_player_team")
+            if sel_team:
+                tid = player_repo.get_team_id_by_name(sel_team)
+                if tid is not None:
+                    rows = player_repo.get_players_by_team(tid)
+                    if not rows:
+                        st.info("このチームに選手登録がありません。")
+                    else:
+                        options_p = [f"{r[0]} {r[1]}（{r[2]}）" for r in rows]
+
+                        cp_all, cp_none = st.columns(2)
+                        with cp_all:
+                            if st.button("全選択", key="del_player_all"):
+                                st.session_state["del_player_selected"] = list(range(len(rows)))
+                        with cp_none:
+                            if st.button("全解除", key="del_player_none"):
+                                st.session_state["del_player_selected"] = []
+
+                        selected_players = st.multiselect(
+                            "削除したい選手を選択（複数可）",
+                            options=list(range(len(rows))),
+                            default=st.session_state.get("del_player_selected", []),
+                            format_func=lambda i: options_p[i],
+                            key="db_admin_del_players",
+                        )
+                        st.session_state["del_player_selected"] = selected_players
+
+                        if selected_players:
+                            st.caption(f"{len(selected_players)} 名を選択中")
+                            st.warning(
+                                f"選択した **{len(selected_players)} 名** を削除します。元に戻すことはできません。"
+                            )
+                            col_dp1, col_dp2 = st.columns(2)
+                            with col_dp1:
+                                if st.button(f"本当に {len(selected_players)} 名を削除する", key="db_admin_del_player_confirm", type="primary"):
+                                    for idx in selected_players:
+                                        player_repo.delete_player(tid, rows[idx][0])
+                                    st.session_state.pop("del_player_selected", None)
+                                    st.session_state["member_df"] = None
+                                    st.success(f"{len(selected_players)} 名を削除しました。")
+                                    st.rerun()
+                            with col_dp2:
+                                if st.button("キャンセル", key="db_admin_del_player_cancel"):
+                                    st.session_state.pop("del_player_selected", None)
+                                    st.rerun()
 
     st.write("---")
     if st.button("スタート画面に戻る"):
