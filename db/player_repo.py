@@ -114,8 +114,9 @@ def get_players_by_team(チーム_id: int) -> List[Tuple[str, str, str]]:
     """Return list of (number, name, lr) for the given team."""
     conn = schema.get_conn()
     c = conn.cursor()
+    order = "(CASE WHEN 背番号 ~ '^[0-9]+$' THEN 背番号::integer ELSE 999999 END), 背番号" if schema.is_postgres() else "CAST(背番号 AS INTEGER), 背番号"
     c.execute(
-        'SELECT 背番号, 名前, 左右 FROM player WHERE チーム_id = ? ORDER BY CAST(背番号 AS INTEGER), 背番号',
+        f'SELECT 背番号, 名前, 左右 FROM player WHERE チーム_id = ? ORDER BY {order}',
         (チーム_id,)
     )
     rows = c.fetchall()
@@ -234,10 +235,11 @@ def get_all_players_with_team() -> list:
     """Return all players with team name in one JOIN query (list of dicts)."""
     conn = schema.get_conn()
     c = conn.cursor()
-    c.execute( '''
+    _num_order = "(CASE WHEN p.背番号 ~ '^[0-9]+$' THEN p.背番号::integer ELSE 999999 END)" if schema.is_postgres() else "CAST(p.背番号 AS INTEGER)"
+    c.execute( f'''
         SELECT t.名前, p.背番号, p.名前, p.左右
         FROM player p JOIN team t ON p.チーム_id = t.id
-        ORDER BY t.名前, CAST( p.背番号 AS INTEGER ), p.背番号
+        ORDER BY t.名前, {_num_order}, p.背番号
     ''' )
     rows = c.fetchall()
     conn.close()
