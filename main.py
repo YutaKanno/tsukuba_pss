@@ -457,17 +457,20 @@ if st.session_state.page_ctg == "start":
                 p_name = st.text_input("名前", key="reg_name")
             with c3:
                 p_lr = st.selectbox("左右", ["右", "左"], key="reg_lr")
-            if st.button("選手を追加") and sel and str(p_num or "").strip() and str(p_name or "").strip():
+            _p_num_str = str(p_num or "").strip()
+            if _p_num_str and not _p_num_str.isdigit():
+                st.warning("背番号は数字のみ入力してください。")
+            if st.button("選手を追加") and sel and _p_num_str and _p_num_str.isdigit() and str(p_name or "").strip():
                 tid = player_repo.get_team_id_by_name(sel)
                 if tid is not None:
-                    existing = player_repo.get_player_by_number(tid, str(p_num).strip())
+                    existing = player_repo.get_player_by_number(tid, _p_num_str)
                     if existing:
                         st.session_state["player_add_duplicate"] = (
-                            sel, str(p_num).strip(), str(p_name).strip(), p_lr, existing[0]
+                            sel, _p_num_str, str(p_name or "").strip(), p_lr, existing[0]
                         )
                         st.rerun()
                     else:
-                        player_repo.add_player(tid, str(p_num).strip(), str(p_name).strip(), p_lr)
+                        player_repo.add_player(tid, _p_num_str, str(p_name or "").strip(), p_lr)
                         st.session_state["member_df"] = None
                         st.success(f"{sel} に {p_name} を登録しました")
                         st.rerun()
@@ -478,6 +481,7 @@ if st.session_state.page_ctg == "start":
                 tid = player_repo.get_team_id_by_name(sel)
                 if tid is not None:
                     rows = []
+                    _invalid_nums = []
                     for line in bulk_text.strip().splitlines():
                         line = line.strip()
                         if not line:
@@ -485,8 +489,13 @@ if st.session_state.page_ctg == "start":
                         parts = [p.strip() for p in line.replace("\t", ",").split(",") if p.strip()]
                         if len(parts) >= 2:
                             背番号, 名前 = parts[0], parts[1]
+                            if not 背番号.isdigit():
+                                _invalid_nums.append(背番号)
+                                continue
                             左右 = parts[2] if len(parts) >= 3 and parts[2] in ("右", "左") else "右"
                             rows.append((背番号, 名前, 左右))
+                    if _invalid_nums:
+                        st.warning(f"背番号は数字のみ入力してください。スキップされた行: {', '.join(_invalid_nums)}")
                     if rows:
                         n = player_repo.add_players_bulk(tid, rows)
                         st.session_state["member_df"] = None
