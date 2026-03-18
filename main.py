@@ -1,7 +1,7 @@
 """
 Tsukuba PSS entry point.
 """
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 import pandas as pd
@@ -12,7 +12,7 @@ import db_admin
 import main_page
 import member
 from db import game_repo, player_repo, schema
-from streamlit_cookies_controller import CookieController as _CookieController
+import extra_streamlit_components as _stx
 
 
 def init_session() -> None:
@@ -78,14 +78,14 @@ def _set_auth_session(cookie_ctrl, team_id: int, team_name: str) -> None:
     cookie_ctrl.set(
         _auth.COOKIE_NAME,
         token,
-        max_age = _auth.TOKEN_DAYS * 24 * 3600,
+        expires_at=datetime.now() + timedelta(days=_auth.TOKEN_DAYS),
     )
     st.rerun()
 
 
 def _logout(cookie_ctrl) -> None:
     """Cookie を削除して session を初期化。"""
-    cookie_ctrl.remove(_auth.COOKIE_NAME)
+    cookie_ctrl.delete(_auth.COOKIE_NAME)
     for k in ["logged_in_team_id", "logged_in_team_name"]:
         st.session_state.pop(k, None)
     st.rerun()
@@ -153,7 +153,7 @@ st.markdown("""
 ensure_db()
 
 # ── Cookie コントローラー & 認証復元 ──
-_cookie_ctrl = _CookieController(key="tsukuba_pss_cm")
+_cookie_ctrl = _stx.CookieManager(key="tsukuba_pss_cm")
 
 if "logged_in_team_id" not in st.session_state:
     _token = _cookie_ctrl.get(_auth.COOKIE_NAME)
