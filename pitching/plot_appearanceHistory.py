@@ -40,7 +40,7 @@ def plot_appearance_history( df: pd.DataFrame ) -> io.BytesIO | None:
 
     all_text = [ _COLS ] + df_disp.values.tolist()
 
-    figsize = ( col_count * 0.85, row_count * 0.38 )
+    figsize = ( col_count * 0.85, row_count * 0.24 )
     fig, ax = plt.subplots( figsize = figsize, dpi = 150 )
     ax.axis( 'off' )
 
@@ -51,9 +51,9 @@ def plot_appearance_history( df: pd.DataFrame ) -> io.BytesIO | None:
     )
     table.set_zorder( 2 )
     table.auto_set_font_size( False )
-    table.set_fontsize( 9 )
+    table.set_fontsize( 8 )
     table.auto_set_column_width( list( range( col_count ) ) )
-    table.scale( 1, 1.4 )
+    table.scale( 1, 1.0 )
 
     for col in range( col_count ):
         for r in range( row_count ):
