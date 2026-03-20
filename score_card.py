@@ -19,20 +19,29 @@ _BB_RESULTS    = frozenset( { '四球', '死球' } )
 _ERROR_RESULTS = frozenset( { 'エラー' } )
 _SAC_RESULTS   = frozenset( { '犠打', '犠飛' } )
 
+# 得点表記（丸数字）と得点判定に使うステータス列
+_RUN_CIRCLES = '①②③④⑤⑥⑦⑧⑨'
+_STATUS_COLS = [ '打者状況', '一走状況', '二走状況', '三走状況' ]
+
 # PDF セル文字色
 _COLOR_HIT = '#DC2626'   # 赤（ヒット）
 _COLOR_BB  = '#2563EB'   # 青（四死球・エラー）
 _COLOR_SAC = '#16A34A'   # 緑（犠打・犠飛）
 
 
+def _strip_run_circle( s: str ) -> str:
+    """結果文字列末尾の丸数字を取り除く（色判定用）。"""
+    return s.rstrip( _RUN_CIRCLES )
+
+
 def _result_color( text: str ):
     """打席結果テキストに対応する PDF 文字色を返す（なければ None）。
 
-    '単打 / 三振' のような打者一巡表記は全パーツを確認し優先度で判定:
+    '単打① / 三振' のような打者一巡・得点付き表記は全パーツを確認し優先度で判定:
     ヒット > 四死球/エラー > 犠打/犠飛
     （1セルは単色テキストのため複数色には対応不可）
     """
-    parts = [ p.strip() for p in text.split( '/' ) ]
+    parts = [ _strip_run_circle( p.strip() ) for p in text.split( '/' ) ]
     if any( p in _HIT_RESULTS for p in parts ):
         return _COLOR_HIT
     if any( p in _BB_RESULTS or p in _ERROR_RESULTS for p in parts ):
@@ -274,81 +283,46 @@ def _scorebook_df( df: pd.DataFrame, side: str, innings: list ) -> pd.DataFrame:
             '打席左右': lr_val,
         }
         for inn in innings:
-            # 同一イニングに複数打席（打者一巡）は「/」で列挙
-            results = player_ab[ player_ab[ '回' ] == inn ][ '打席結果' ].tolist()
-            row_data[ str( inn ) ] = ' / '.join( str( r ) for r in results ) if results else ''
+            # 打席Id ごとに得点数を集計し結果に丸数字を付与
+            # 同一イニング複数打席（打者一巡）は「/」で列挙
+            inn_abs = player_ab[ player_ab[ '回' ] == inn ]
+            if inn_abs.empty:
+                row_data[ str( inn ) ] = ''
+                continue
+
+            parts = []
+            for _, ab_row in inn_abs.iterrows():
+                result = str( ab_row[ '打席結果' ] )
+                ab_id  = ab_row[ '打席Id' ] if '打席Id' in ab_row.index else None
+
+                # 打席Id が使えれば打席単位で絞り込み、なければこのイニング全体
+                if pd.notna( ab_id ):
+                    ab_plays = df_side_all[ df_side_all[ '打席Id' ] == ab_id ]
+                else:
+                    ab_plays = df_side_all[
+                        ( df_side_all[ '打者氏名' ] == name ) &
+                        ( df_side_all[ '回' ]       == inn  )
+                    ]
+
+                # 本進の個数 = 得点数
+                run_count = sum(
+                    int( ab_plays[ sc ].fillna( '' ).str.contains( '本進', na = False ).sum() )
+                    for sc in _STATUS_COLS
+                    if sc in ab_plays.columns
+                )
+                if run_count > 0:
+                    result += _RUN_CIRCLES[ min( run_count, len( _RUN_CIRCLES ) ) - 1 ]
+                parts.append( result )
+
+            row_data[ str( inn ) ] = ' / '.join( parts )
         records.append( row_data )
 
     return pd.DataFrame( records ).set_index( '打順' )
 
 
-def _scorebook_entry_keys( df_ab: pd.DataFrame ) -> list:
-    """_scorebook_df と同じ方法で (打順, 選手名) の出現順リストを返す。"""
-    from collections import defaultdict as _dd
-    order_players_seq: dict = _dd( list )
-    seen_keys: set = set()
-    for _, row in df_ab.iterrows():
-        o = row[ '打順' ]
-        n = str( row[ '打者氏名' ] or '' )
-        if pd.notna( o ):
-            k = ( int( o ), n )
-            if k not in seen_keys:
-                seen_keys.add( k )
-                order_players_seq[ int( o ) ].append( n )
-    return [
-        ( order, name )
-        for order in sorted( order_players_seq.keys() )
-        for name  in order_players_seq[ order ]
-    ]
-
-
-def _scorebook_bold_fn( df: pd.DataFrame, side: str, innings: list ):
-    """得点が入った打席セルを太文字にする関数を返す。
-
-    各打席の全プレイで score_col（先攻/後攻得点）が増加していれば得点あり。
-    """
-    score_col = '先攻得点' if side == '表' else '後攻得点'
-    df_side   = df[ df[ '表裏' ] == side ].sort_values( 'プレイの番号' )
-
-    df_ab = df_side[
-        ( df_side[ '打席の継続' ] == '打席完了' ) &
-        ( df_side[ '打席結果' ].notna()         ) &
-        ( df_side[ '打席結果' ]  != '0'         ) &
-        ( df_side[ '打席結果' ]  != ''          )
-    ].copy()
-
-    if df_ab.empty:
-        return None
-
-    entry_keys = _scorebook_entry_keys( df_ab )
-
-    # reset_index() 後の列順: 打順(0), 守備位置(1), 選手名(2), 打席左右(3), 1(4), 2(5),...
-    _NON_INN = 4
-    inn_to_col = { inn: _NON_INN + i for i, inn in enumerate( innings ) }
-
-    bold: set = set()
-    for row_idx, ( order, name ) in enumerate( entry_keys ):
-        r            = row_idx + 1   # テーブルは 0=ヘッダー、1〜=データ行
-        player_plays = df_side[
-            ( df_side[ '打順' ]    == order ) &
-            ( df_side[ '打者氏名' ] == name  )
-        ]
-        for inn in innings:
-            col       = inn_to_col[ inn ]
-            inn_plays = player_plays[ player_plays[ '回' ] == inn ]
-            if inn_plays.empty:
-                continue
-            scores = pd.to_numeric( inn_plays[ score_col ], errors = 'coerce' ).dropna()
-            if len( scores ) >= 2 and int( scores.iloc[ -1 ] ) > int( scores.iloc[ 0 ] ):
-                bold.add( ( r, col ) )
-
-    if not bold:
-        return None
-
-    def fn( r, col, _text ):
-        return ( r, col ) in bold
-
-    return fn
+def _cell_has_run( _r, _col, text: str ) -> bool:
+    """セルテキストに丸数字（得点マーク）が含まれていれば True。"""
+    return bool( text ) and any( c in _RUN_CIRCLES for c in text )
 
 
 _NON_OUT_RESULTS = _HIT_RESULTS | _BB_RESULTS | _ERROR_RESULTS
@@ -597,11 +571,12 @@ def generate_score_card_pdf(
     )
 
     # 色付け・太文字関数
-    score_color   = _score_table_color_fn( score_data ) if not score_data.empty else None
-    top_sb_color  = _scorebook_color_fn( top_sb )       if not top_sb.empty   else None
-    bot_sb_color  = _scorebook_color_fn( bot_sb )       if not bot_sb.empty   else None
-    top_sb_bold   = _scorebook_bold_fn( df, '表', innings )
-    bot_sb_bold   = _scorebook_bold_fn( df, '裏', innings )
+    score_color  = _score_table_color_fn( score_data ) if not score_data.empty else None
+    top_sb_color = _scorebook_color_fn( top_sb )       if not top_sb.empty   else None
+    bot_sb_color = _scorebook_color_fn( bot_sb )       if not bot_sb.empty   else None
+    # 得点セルの太文字: テキストに丸数字が含まれているかで判定
+    top_sb_bold  = _cell_has_run
+    bot_sb_bold  = _cell_has_run
 
     # スコア（2列連結）
     ax_score = fig.add_subplot( gs[ 0, : ] )
