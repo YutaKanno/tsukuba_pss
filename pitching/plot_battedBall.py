@@ -141,9 +141,10 @@ def batted_ball_plot(
                 linestyle = ( 0, ( 3, 2 ) ), zorder = 2,
             )
         elif ball_type == 'フライ':
+            rad = -0.2 if x > 130 else 0.2
             patch = FancyArrowPatch(
                 _HOME, ( x, y ),
-                connectionstyle = 'arc3,rad=0.2',
+                connectionstyle = f'arc3,rad={rad}',
                 arrowstyle      = '-',
                 color           = color,
                 linewidth       = 0.4,

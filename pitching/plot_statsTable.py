@@ -109,6 +109,13 @@ def plot_statsTable(
     if aim_indices:
         _uniform_width( aim_indices )
 
+    # Linux/Docker でフォントメトリクスが異なるため列幅に余白を追加
+    for col in range( col_count ):
+        for r in range( total_row ):
+            if ( r, col ) in table._cells:
+                w = table._cells[ ( r, col ) ].get_width()
+                table._cells[ ( r, col ) ].set_width( w * 1.3 )
+
     for r in range( total_row ):
         for col in range( col_count ):
             table[ r, col ].set_facecolor( 'none' )
