@@ -301,6 +301,18 @@ def delete_last_play(game_id: int, owner_team_id: Optional[int] = None) -> None:
     conn.close()
 
 
+def get_plays_df_for_game(game_id: int, owner_team_id: Optional[int] = None):
+    """Return play data for a specific game as a pandas DataFrame."""
+    import pandas as pd
+    rows = get_play_list(game_id, owner_team_id=owner_team_id)
+    if not rows:
+        return pd.DataFrame(columns=_PLAY_DATA_COLS)
+    df = pd.DataFrame(rows, columns=_PLAY_DATA_COLS)
+    for col in ('回', '打順', '先攻得点', '後攻得点'):
+        df[col] = pd.to_numeric(df[col], errors='coerce')
+    return df
+
+
 def delete_game(game_id: int, owner_team_id: Optional[int] = None) -> None:
     """Delete a game and all its play_data rows. No-op if ownership fails."""
     conn = schema.get_conn()

@@ -12,6 +12,7 @@ import db_admin
 import main_page
 import member
 import pitcher_analysis
+import score_card
 from db import game_repo, player_repo, schema, user_repo
 import extra_streamlit_components as _stx
 
@@ -301,7 +302,7 @@ if st.session_state.page_ctg == "start":
     if st.session_state.get( "pending_analysis_select" ):
         st.divider()
         st.markdown( "#### 分析モードを選択してください" )
-        _ac1, _ac2 = st.columns( 2 )
+        _ac1, _ac2, _ac3 = st.columns( 3 )
         with _ac1:
             if st.button( "⚾ 投手分析", type = "primary", use_container_width = True ):
                 st.session_state.page_ctg = "pitcher_analysis"
@@ -310,6 +311,11 @@ if st.session_state.page_ctg == "start":
         with _ac2:
             st.button( "🏃 打者分析", disabled = True, use_container_width = True )
             st.caption( "（準備中）" )
+        with _ac3:
+            if st.button( "📋 スコア表", type = "primary", use_container_width = True ):
+                st.session_state.page_ctg = "score_card"
+                st.session_state.pop( "pending_analysis_select", None )
+                st.rerun()
 
     if st.session_state.get( "pending_game_select" ):
         games = game_repo.list_games( team_id = _logged_tid )
@@ -718,6 +724,9 @@ elif st.session_state.page_ctg == "member":
 
 elif st.session_state.page_ctg == "pitcher_analysis":
     pitcher_analysis.show()
+
+elif st.session_state.page_ctg == "score_card":
+    score_card.show()
 
 elif st.session_state.page_ctg == "db_admin":
     db_admin.run()
