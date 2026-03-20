@@ -264,7 +264,6 @@ def show():
     with tab_l:
         _render_side_tab( df_p, '左', '左打者' )
     with tab_comment:
-        st.markdown( f'**{selected_pitcher} へのコメント**' )
         saved_comment = comment_repo.get_comment( team_id, selected_pitcher )
 
         if 'pa_comment_editing' not in st.session_state:
