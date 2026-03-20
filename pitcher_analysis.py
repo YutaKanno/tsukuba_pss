@@ -1,5 +1,6 @@
 """投手分析ページ"""
 import io
+import datetime
 import matplotlib
 matplotlib.use( 'Agg' )
 
@@ -14,6 +15,8 @@ from pitching.calc_stats import calc_stats, convert_stats_dict_to_df
 from pitching.plot_statsTable import plot_statsTable
 from pitching.plot_pt_pieChart import pt_pieChart
 from pitching.plot_courceDist import course_distPlot
+from pitching.plot_courseDetail import course_detailPlot
+from pitching.plot_battedBall import batted_ball_plot
 
 
 PITCH_TYPE_COLORS = {
@@ -48,6 +51,7 @@ def _load_plays_df( team_id: int ) -> pd.DataFrame:
     for col in [ 'コースX', 'コースY', '打球位置X', '打球位置Y', 'S', 'B', '構え' ]:
         if col in df.columns:
             df[ col ] = pd.to_numeric( df[ col ], errors = 'coerce' )
+    df = df[ df[ '球種' ] != '特殊球' ]
     return _add_analysis_cols( df )
 
 
@@ -122,16 +126,24 @@ def _render_side_tab( df_p: pd.DataFrame, side: str, side_label: str ):
 
     # ── コース分布（球種別） ──────────────────────────────
     st.markdown( '**コース分布（球種別）**' )
-    n_cols     = min( len( pt_list ), 6 )
-    row_chunks = [ pt_list[ i : i + n_cols ] for i in range( 0, len( pt_list ), n_cols ) ]
+    _N_COLS    = 5
+    pt_list_5  = pt_list[ : _N_COLS ]
+    row_chunks = [ pt_list_5[ i : i + _N_COLS ] for i in range( 0, len( pt_list_5 ), _N_COLS ) ]
 
     for chunk in row_chunks:
-        cols = st.columns( n_cols )
+        cols = st.columns( _N_COLS )
         for j, pt in enumerate( chunk ):
-            buf = course_distPlot( df_p, pitch_type = pt, batter_side = side )
-            if buf is not None:
+            buf_dist   = course_distPlot(   df_p, pitch_type = pt, batter_side = side )
+            buf_detail = course_detailPlot( df_p, pitch_type = pt, batter_side = side )
+            buf_batted = batted_ball_plot(  df_p, pitch_type = pt, batter_side = side )
+            if buf_dist is not None:
                 with cols[ j ]:
-                    st.image( buf, caption = pt, use_container_width = True )
+                    st.caption( pt )
+                    st.image( buf_dist,   use_container_width = True )
+                    if buf_detail is not None:
+                        st.image( buf_detail, use_container_width = True )
+                    if buf_batted is not None:
+                        st.image( buf_batted, use_container_width = True )
 
 
 def _go_start():
@@ -149,15 +161,35 @@ def show():
         st.warning( 'データがありません。先に試合データを入力してください。' )
         return
 
-    # 守備チーム・投手を並列ドロップダウンで選択
+    # ── 期間フィルター ────────────────────────────────────────
+    df[ '_date' ] = pd.to_datetime( df[ '試合日時' ], errors = 'coerce' )
+    valid_dates   = df[ '_date' ].dropna()
+    date_min      = valid_dates.min().date() if not valid_dates.empty else datetime.date.today()
+    date_max      = valid_dates.max().date() if not valid_dates.empty else datetime.date.today()
+
+    col_start, col_end, col_team, col_pitcher = st.columns( 4 )
+
+    with col_start:
+        start_date = st.date_input( '開始日', value = date_min, key = 'pa_start' )
+    with col_end:
+        end_date   = st.date_input( '終了日', value = date_max, key = 'pa_end'   )
+
+    df = df[
+        ( df[ '_date' ].dt.date >= start_date ) &
+        ( df[ '_date' ].dt.date <= end_date   )
+    ]
+
+    # ── 守備チーム・投手を並列ドロップダウンで選択 ───────────
     teams = sorted( df[ '守備チーム' ].dropna().unique().tolist() )
     if not teams:
         st.warning( '投手データが見つかりません。' )
         return
 
-    col_team, col_pitcher = st.columns( 2 )
+    my_team   = st.session_state.get( 'logged_in_team_name', '' )
+    team_idx  = teams.index( my_team ) if my_team in teams else 0
+
     with col_team:
-        selected_team = st.selectbox( '守備チーム', teams, key = 'pa_team' )
+        selected_team = st.selectbox( '守備チーム', teams, index = team_idx, key = 'pa_team' )
 
     df_team = df[ df[ '守備チーム' ] == selected_team ]
     pitchers = sorted( df_team[ '投手氏名' ].dropna().unique().tolist() )

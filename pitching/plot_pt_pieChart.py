@@ -68,15 +68,25 @@ def pt_pieChart(
     colors = [ pt_color_dict.get( k, '#888888' ) for k in pt_pct[ '球種' ] ]
 
     if show_labels:
-        labels = [
-            f"{row['球種']}\n{row['投球割合']:.1f}%" if row[ '投球割合' ] > 5 else row[ '球種' ]
+        wedges, _ = ax.pie(
+            pt_pct[ '投球割合' ], colors = colors, startangle = 90
+        )
+        legend_labels = [
+            f"{row['球種']}  {row['投球割合']:.1f}%"
             for _, row in pt_pct.iterrows()
         ]
-        wedges, texts = ax.pie(
-            pt_pct[ '投球割合' ], labels = labels, colors = colors, startangle = 90
+        ax.legend(
+            wedges,
+            legend_labels,
+            loc            = 'center left',
+            bbox_to_anchor = ( 1.02, 0.5 ),
+            fontsize       = 9,
+            frameon        = False,
+            handlelength   = 0.8,
+            handleheight   = 0.8,
+            handletextpad  = 0.4,
+            labelspacing   = 0.35,
         )
-        for text, color in zip( texts, colors ):
-            text.set_color( color )
     else:
         ax.pie( pt_pct[ '投球割合' ], colors = colors, startangle = 90 )
 

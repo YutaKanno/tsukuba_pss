@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from matplotlib import font_manager
 import pandas as pd
 from plotnine import (
-    ggplot, aes, stat_density_2d, geom_rect, scale_fill_gradientn,
+    ggplot, aes, stat_density_2d, geom_rect, geom_polygon, scale_fill_gradientn,
     coord_fixed, lims, theme_minimal, theme, element_text, element_line,
     element_blank, element_rect, labs,
 )
@@ -59,6 +59,11 @@ def course_distPlot(
 
     sz_rect = ( 53, 210, 53, 210 )
 
+    _home_df = pd.DataFrame( {
+        'x': [ 53,   53, 131.5, 210,  210 ],
+        'y': [  0,  -10,   -20,  -10,    0 ],
+    } )
+
     p = (
         ggplot( df_p, aes( x = 'コースX', y = 'コースYadj' ) )
         + stat_density_2d(
@@ -77,8 +82,16 @@ def course_distPlot(
             linetype   = 'solid',
             inherit_aes = False,
         )
+        + geom_polygon(
+            data        = _home_df,
+            mapping     = aes( x = 'x', y = 'y' ),
+            fill        = 'white',
+            color       = 'black',
+            size        = 0.6,
+            inherit_aes = False,
+        )
         + coord_fixed( ratio = 1 )
-        + lims( x = ( 0, 263 ), y = ( 0, 263 ) )
+        + lims( x = ( 0, 263 ), y = ( -20, 263 ) )
         + theme_minimal()
         + theme(
             figure_size      = ( 2.5, 2.5 ),
@@ -92,7 +105,7 @@ def course_distPlot(
             plot_background  = element_rect( fill = 'white' ),
             panel_background = element_rect( fill = '#F8F8F8' ),
         )
-        + labs( title = f'{ pitch_type }' )
+        + labs( title = '' )
     )
 
     with warnings.catch_warnings():
