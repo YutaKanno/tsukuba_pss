@@ -148,7 +148,7 @@ def course_detailPlot(
         color              = _AIM_COLOR.get( aim, '#AAAAAA' )
         marker, filled     = _RESULT_STYLE.get( res, _DEFAULT_STYLE )
 
-        kw = dict( marker = marker, s = 28, linewidths = 0.9, zorder = 3 )
+        kw = dict( marker = marker, s = 12, linewidths = 0.7, zorder = 3 )
         if marker == 'x':
             ax.scatter( x, y, c = color, **kw )
         elif filled:
@@ -184,6 +184,8 @@ def course_detailPlot(
         handletextpad = 0.3,
         borderpad  = 0.4,
         labelspacing = 0.2,
+        title      = '構え',
+        title_fontsize = 4.5,
     )
     ax.add_artist( leg1 )
     ax.legend(

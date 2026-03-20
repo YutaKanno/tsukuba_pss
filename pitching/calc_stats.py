@@ -169,9 +169,141 @@ def calc_stats( df_p, pitch_type, batter_side, stats_dict ):
     return stats_dict
 
 
+def calc_overallStats( df_p, batter_side, label ):
+
+    df_p_pt = df_p[ df_p[ '打撃結果' ] != '0' ]
+
+    if batter_side is not None:
+        df_p_pt = df_p_pt[ df_p_pt[ '打席左右' ] == batter_side ]
+
+    # 登板数
+    n_game = df_p_pt.drop_duplicates( subset = [ '試合日時', '先攻チーム', '後攻チーム' ] ).shape[ 0 ]
+
+    # 投球回
+    n_inning = round(
+        len( df_p_pt[ df_p_pt[ '打者状況' ] == 'アウト' ] ) +
+        len( df_p_pt[ df_p_pt[ '一走状況' ].isin( [ '封殺', '投手牽制死', '捕手牽制死' ] ) ] ) +
+        len( df_p_pt[ df_p_pt[ '二走状況' ].isin( [ '封殺', '投手牽制死', '捕手牽制死' ] ) ] ) +
+        len( df_p_pt[ df_p_pt[ '三走状況' ].isin( [ '封殺', '投手牽制死', '捕手牽制死' ] ) ] ) / 3,
+        1
+    )
+
+    # 投球数
+    n_pitch = len( df_p_pt )
+
+    # 打席数
+    n_pa = len( df_p_pt[ df_p_pt[ '打席の継続' ] == '打席完了' ] )
+
+    # 安打数
+    n_hit = len( df_p_pt[ df_p_pt[ '打撃結果' ].isin( [ '単打', '二塁打', '三塁打', '本塁打' ] ) ] )
+
+    # 本塁打
+    n_hr = len( df_p_pt[ df_p_pt[ '打撃結果' ] == '本塁打' ] )
+
+    # 奪三振
+    n_k = len( df_p_pt[ df_p_pt[ '打撃結果' ].isin( [ '見逃し三振', '空振り三振', 'K3', '振り逃げ' ] ) ] )
+
+    # 四死球
+    n_bb = len( df_p_pt[ df_p_pt[ '打撃結果' ].isin( [ '四球', '死球' ] ) ] )
+
+    # 失点
+    n_runs = len( df_p_pt[ df_p_pt[ '打者状況' ] == '本進' ] )
+
+    # 失点率
+    runs_rate = round( 9 * n_runs / n_inning, 2 ) if n_inning > 0 else np.nan
+
+    # ストライク率
+    n_strike  = len( df_p_pt[ ~ df_p_pt[ '打撃結果' ].isin( [ 'ボール', '四球', '死球' ] ) ] )
+    strike_rate = round( 100 * n_strike / n_pitch ) if n_pitch > 0 else np.nan
+
+    # 空振り率
+    n_whiff = len( df_p_pt[ df_p_pt[ '打撃結果' ].isin( [ '空振り', '空振り三振' ] ) ] )
+    n_swing = len( df_p_pt[ ~ df_p_pt[ '打撃結果' ].isin( [ '見逃し', '見逃し三振', 'ボール', '死球', '四球' ] ) ] )
+    whiff_rate = round( 100 * n_whiff / n_swing ) if n_swing > 0 else np.nan
+
+    # 打数
+    n_sac = len( df_p_pt[ df_p_pt[ '打撃結果' ].isin( [ '犠打', '犠飛' ] ) ] )
+    n_ab  = n_pa - n_bb - n_sac
+
+    # 被打率
+    oav = round( n_hit / n_ab, 3 ) if n_ab > 0 else np.nan
+
+    # 被出塁率
+    n_sf        = len( df_p_pt[ df_p_pt[ '打撃結果' ] == '犠飛' ] )
+    n_on_base   = n_hit + n_bb
+    n_oba_denom = n_ab + n_bb + n_sf
+    oba = round( n_on_base / n_oba_denom, 3 ) if n_oba_denom > 0 else np.nan
+
+    # 長打率
+    n_base = (
+        len( df_p_pt[ df_p_pt[ '打撃結果' ] == '単打'  ] ) +
+        2 * len( df_p_pt[ df_p_pt[ '打撃結果' ] == '二塁打' ] ) +
+        3 * len( df_p_pt[ df_p_pt[ '打撃結果' ] == '三塁打' ] ) +
+        4 * len( df_p_pt[ df_p_pt[ '打撃結果' ] == '本塁打' ] )
+    )
+    slg = round( n_base / n_ab, 3 ) if n_ab > 0 else np.nan
+
+    # OPS
+    ops = round( oba + slg, 3 ) if pd.notna( oba ) and pd.notna( slg ) else np.nan
+
+    # K%, BB%, K-BB%
+    k_rate  = round( 100 * n_k  / n_pa, 1 ) if n_pa > 0 else np.nan
+    bb_rate = round( 100 * n_bb / n_pa, 1 ) if n_pa > 0 else np.nan
+    k_bb_rate = round( k_rate - bb_rate, 1 ) if pd.notna( k_rate ) and pd.notna( bb_rate ) else np.nan
+
+    # 内野フライ率 / ゴロ率
+    n_batted = len( df_p_pt[
+        df_p_pt[ '打球タイプ' ].notna() &
+        ( df_p_pt[ '打球タイプ' ] != '' ) &
+        ( df_p_pt[ '打席の継続' ] == '打席完了' )
+    ] )
+    n_ifb = len( df_p_pt[
+        ( df_p_pt[ '打球タイプ' ] == 'フライ' ) &
+        ( df_p_pt[ '打席の継続' ] == '打席完了' ) &
+        df_p_pt[ '捕球選手' ].astype( str ).isin( [ '1', '2', '3', '4', '5', '6' ] )
+    ] )
+    n_gb = len( df_p_pt[ df_p_pt[ '打球タイプ' ] == 'ゴロ' ] )
+
+    ifb_rate = round( 100 * n_ifb / n_batted, 1 ) if n_batted > 0 else np.nan
+    gb_rate  = round( 100 * n_gb  / n_batted, 1 ) if n_batted > 0 else np.nan
+
+    return {
+        'index':        label,
+        '登板数':       n_game,
+        '投球回':       n_inning,
+        '投球数':       n_pitch,
+        '打席数':       n_pa,
+        '安打数':       n_hit,
+        '本塁打数':     n_hr,
+        '奪三振数':     n_k,
+        '四死球数':     n_bb,
+        '失点数':       n_runs,
+        '失点率':       runs_rate,
+        'ストライク率': strike_rate,
+        '空振り率':     whiff_rate,
+        '被打率':       oav,
+        '被出塁率':     oba,
+        '長打率':       slg,
+        'OPS':          ops,
+        '奪三振率':     k_rate,
+        '四死球率':     bb_rate,
+        'K-BB%':        k_bb_rate,
+        '内野フライ率': ifb_rate,
+        'ゴロ率':       gb_rate,
+    }
+
+
 def convert_stats_dict_to_df( stats_dict: dict ) -> pd.DataFrame:
     rows = {}
     for key, val in stats_dict.items():
         rows[ key ] = { **val[ 'info_dict' ], **val[ 'stats_dict' ], **val[ 'aim_dict' ] }
 
-    return pd.DataFrame( rows ).T.reset_index( drop = True ).drop( columns = [ '打席左右' ] )
+    df = pd.DataFrame( rows ).T.reset_index( drop = True ).drop( columns = [ '打席左右' ] )
+
+    for col in [ '被打率', '出塁率', '長打率' ]:
+        if col in df.columns:
+            df[ col ] = df[ col ].apply(
+                lambda v: f'{v:.3f}'[ 1: ] if pd.notna( v ) and isinstance( v, float ) else v
+            )
+
+    return df

@@ -264,6 +264,38 @@ def migrate_reassociate_games_by_team(team_name: str) -> int:
     return count
 
 
+def migrate_add_comment_table() -> None:
+    """Create pitcher_comment table if it doesn't exist (SQLite & PostgreSQL)."""
+    conn = get_conn()
+    c = conn.cursor()
+    try:
+        if is_postgres():
+            c.execute('''
+                CREATE TABLE IF NOT EXISTS pitcher_comment (
+                    id SERIAL PRIMARY KEY,
+                    team_id INTEGER NOT NULL REFERENCES team(id),
+                    pitcher_name TEXT NOT NULL,
+                    comment TEXT NOT NULL DEFAULT '',
+                    UNIQUE(team_id, pitcher_name)
+                )
+            ''')
+        else:
+            c.execute('''
+                CREATE TABLE IF NOT EXISTS pitcher_comment (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    team_id INTEGER NOT NULL REFERENCES team(id),
+                    pitcher_name TEXT NOT NULL,
+                    comment TEXT NOT NULL DEFAULT '',
+                    UNIQUE(team_id, pitcher_name)
+                )
+            ''')
+        conn.commit()
+    except Exception:
+        pass
+    finally:
+        conn.close()
+
+
 def init_db() -> None:
     """Create all tables if they do not exist (SQLite only). For PostgreSQL, run db/supabase_schema.sql once in Supabase."""
     if is_postgres():
@@ -358,6 +390,17 @@ def init_db() -> None:
             password_hash TEXT NOT NULL,
             team_id INTEGER NOT NULL REFERENCES team(id),
             created_at TEXT
+        )
+    ''')
+
+    # 投手コメント
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS pitcher_comment (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            team_id INTEGER NOT NULL REFERENCES team(id),
+            pitcher_name TEXT NOT NULL,
+            comment TEXT NOT NULL DEFAULT '',
+            UNIQUE(team_id, pitcher_name)
         )
     ''')
 

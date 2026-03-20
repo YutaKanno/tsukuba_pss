@@ -38,6 +38,7 @@ def ensure_db() -> None:
     schema.migrate_add_team_password()
     schema.migrate_add_game_owner()
     schema.migrate_add_user_account()
+    schema.migrate_add_comment_table()
     schema.migrate_associate_existing_games("トヨタ自動車東日本")
     schema.migrate_reassociate_games_by_team("筑波大学")
     # 環境変数 INITIAL_TEAM_PASSWORDS (JSON) からチームとパスワードを設定

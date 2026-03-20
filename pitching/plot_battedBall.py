@@ -160,7 +160,7 @@ def batted_ball_plot(
         # ポイント
         ax.scatter(
             x, y,
-            c = color, s = 18, linewidths = 0,
+            c = color, s = 8, linewidths = 0,
             zorder = 3,
         )
 

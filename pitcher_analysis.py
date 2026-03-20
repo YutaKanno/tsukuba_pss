@@ -10,13 +10,17 @@ import matplotlib.pyplot as plt
 import streamlit as st
 
 from db import game_repo
+from db import comment_repo
 from pitching.calc_ptList import calc_ptList
-from pitching.calc_stats import calc_stats, convert_stats_dict_to_df
+from pitching.calc_stats import calc_stats, convert_stats_dict_to_df, calc_overallStats
 from pitching.plot_statsTable import plot_statsTable
+from pitching.plot_overallStatsTable import plot_overallStatsTable
 from pitching.plot_pt_pieChart import pt_pieChart
 from pitching.plot_courceDist import course_distPlot
 from pitching.plot_courseDetail import course_detailPlot
 from pitching.plot_battedBall import batted_ball_plot
+from pitching.plot_velocityDist import velocity_dist_plot, batted_type_plot
+from generate_pitcher_pdf import generate_pitcher_pdf
 
 
 PITCH_TYPE_COLORS = {
@@ -211,9 +215,96 @@ def show():
         st.warning( f'{selected_pitcher} の投球データが見つかりません。' )
         return
 
-    # ── vs右打者 / vs左打者 タブ ──────────────────────────
-    tab_r, tab_l = st.tabs( [ 'vs 右打者', 'vs 左打者' ] )
+    # ── 全体 / vs右打者 / vs左打者 / 出力 タブ ─────────────
+    tab_all, tab_r, tab_l, tab_comment, tab_export = st.tabs( [ '全体', 'vs 右打者', 'vs 左打者', 'コメント', '出力' ] )
+    with tab_all:
+        st.markdown( '**総合スタッツ**' )
+        overall_df = pd.DataFrame( [
+            calc_overallStats( df_p, None,  f'{ selected_pitcher } 全体' ),
+            calc_overallStats( df_p, '右',  'vs右打者' ),
+            calc_overallStats( df_p, '左',  'vs左打者' ),
+            calc_overallStats( df,   None,  '平均値' ),
+        ] )
+        _blank_for_avg  = [ '投球数', '打席数', '安打数', '本塁打数', '奪三振数', '四死球数' ]
+        _game_only_cols = [ '登板数', '投球回', '失点数', '失点率' ]
+        pitcher_label   = f'{ selected_pitcher } 全体'
+        overall_df.loc[ overall_df[ 'index' ] == '平均値', _blank_for_avg ] = '--'
+        overall_df.loc[ overall_df[ 'index' ] != pitcher_label, _game_only_cols ] = '--'
+        fig_overall = plot_overallStatsTable( overall_df )
+        st.image( _fig_to_image( fig_overall, dpi = _TABLE_DPI ), use_container_width = True )
+
+        st.markdown( '**球速分布**' )
+        buf_vel = velocity_dist_plot( df_p, PITCH_TYPE_COLORS )
+        if buf_vel is not None:
+            st.image( buf_vel, use_container_width = True )
+        else:
+            st.info( '球速データがありません。' )
+
+        st.markdown( '**被打球性質**' )
+        buf_bat = batted_type_plot(
+            df_p,
+            df_all        = df[ df[ '打撃結果' ] != '0' ],
+            pitcher_name  = selected_pitcher,
+        )
+        if buf_bat is not None:
+            st.image( buf_bat, use_container_width = True )
+        else:
+            st.info( '被打球データがありません。' )
     with tab_r:
         _render_side_tab( df_p, '右', '右打者' )
     with tab_l:
         _render_side_tab( df_p, '左', '左打者' )
+    with tab_comment:
+        st.markdown( f'**{selected_pitcher} へのコメント**' )
+        saved_comment = comment_repo.get_comment( team_id, selected_pitcher )
+
+        if 'pa_comment_editing' not in st.session_state:
+            st.session_state.pa_comment_editing = False
+
+        if st.session_state.pa_comment_editing:
+            new_text = st.text_area(
+                'コメント', value = saved_comment,
+                height = 200, key = 'pa_comment_input',
+            )
+            c_save, c_cancel = st.columns( [ 1, 1 ] )
+            with c_save:
+                if st.button( '保存', key = 'pa_comment_save' ):
+                    comment_repo.upsert_comment( team_id, selected_pitcher, new_text )
+                    st.session_state.pa_comment_editing = False
+                    st.rerun()
+            with c_cancel:
+                if st.button( 'キャンセル', key = 'pa_comment_cancel' ):
+                    st.session_state.pa_comment_editing = False
+                    st.rerun()
+        else:
+            if saved_comment:
+                st.text( saved_comment )
+            else:
+                st.info( 'コメントはまだ登録されていません。' )
+            if st.button( 'Edit', key = 'pa_comment_edit' ):
+                st.session_state.pa_comment_editing = True
+                st.rerun()
+
+    with tab_export:
+        st.markdown( '投手分析レポートを PDF として出力します。' )
+        if st.button( 'PDF 生成', key = 'gen_pdf' ):
+            with st.spinner( 'PDF 生成中...' ):
+                _comment_for_pdf = comment_repo.get_comment( team_id, selected_pitcher )
+                pdf_buf = generate_pitcher_pdf(
+                    df_p,
+                    df[ df[ '打撃結果' ] != '0' ],
+                    selected_pitcher,
+                    selected_team,
+                    start_date,
+                    end_date,
+                    PITCH_TYPE_COLORS,
+                    comment = _comment_for_pdf,
+                )
+            fname = f'{ selected_pitcher }_{ start_date }_{ end_date }.pdf'
+            st.download_button(
+                label     = 'PDF ダウンロード',
+                data      = pdf_buf.getvalue(),
+                file_name = fname,
+                mime      = 'application/pdf',
+                key       = 'dl_pdf',
+            )
