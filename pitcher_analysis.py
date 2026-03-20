@@ -22,6 +22,7 @@ from pitching.plot_battedBall import batted_ball_plot
 from pitching.plot_velocityDist import velocity_dist_plot, batted_type_plot
 from pitching.plot_appearanceHistory import plot_appearance_history
 from generate_pitcher_pdf import generate_pitcher_pdf
+from generate_pitcher_pptx import generate_pitcher_pptx
 
 
 PITCH_TYPE_COLORS = {
@@ -294,25 +295,51 @@ def show():
                 st.rerun()
 
     with tab_export:
-        st.markdown( '投手分析レポートを PDF として出力します。' )
-        if st.button( 'PDF 生成', key = 'gen_pdf' ):
-            with st.spinner( 'PDF 生成中...' ):
-                _comment_for_pdf = comment_repo.get_comment( team_id, selected_pitcher )
-                pdf_buf = generate_pitcher_pdf(
-                    df_p,
-                    df[ df[ '打撃結果' ] != '0' ],
-                    selected_pitcher,
-                    selected_team,
-                    start_date,
-                    end_date,
-                    PITCH_TYPE_COLORS,
-                    comment = _comment_for_pdf,
+        _export_comment = comment_repo.get_comment( team_id, selected_pitcher )
+        _df_all_filtered = df[ df[ '打撃結果' ] != '0' ]
+
+        col_pdf, col_pptx = st.columns( 2 )
+
+        with col_pdf:
+            st.markdown( '**PDF**' )
+            if st.button( 'PDF 生成', key = 'gen_pdf' ):
+                with st.spinner( 'PDF 生成中...' ):
+                    pdf_buf = generate_pitcher_pdf(
+                        df_p,
+                        _df_all_filtered,
+                        selected_pitcher,
+                        selected_team,
+                        start_date,
+                        end_date,
+                        PITCH_TYPE_COLORS,
+                        comment = _export_comment,
+                    )
+                st.download_button(
+                    label     = 'PDF ダウンロード',
+                    data      = pdf_buf.getvalue(),
+                    file_name = f'{ selected_pitcher }_{ start_date }_{ end_date }.pdf',
+                    mime      = 'application/pdf',
+                    key       = 'dl_pdf',
                 )
-            fname = f'{ selected_pitcher }_{ start_date }_{ end_date }.pdf'
-            st.download_button(
-                label     = 'PDF ダウンロード',
-                data      = pdf_buf.getvalue(),
-                file_name = fname,
-                mime      = 'application/pdf',
-                key       = 'dl_pdf',
-            )
+
+        with col_pptx:
+            st.markdown( '**PowerPoint**' )
+            if st.button( 'PPTX 生成', key = 'gen_pptx' ):
+                with st.spinner( 'PPTX 生成中...' ):
+                    pptx_buf = generate_pitcher_pptx(
+                        df_p,
+                        _df_all_filtered,
+                        selected_pitcher,
+                        selected_team,
+                        start_date,
+                        end_date,
+                        PITCH_TYPE_COLORS,
+                        comment = _export_comment,
+                    )
+                st.download_button(
+                    label     = 'PPTX ダウンロード',
+                    data      = pptx_buf.getvalue(),
+                    file_name = f'{ selected_pitcher }_{ start_date }_{ end_date }.pptx',
+                    mime      = 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+                    key       = 'dl_pptx',
+                )
