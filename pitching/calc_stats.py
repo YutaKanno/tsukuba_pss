@@ -180,13 +180,13 @@ def calc_overallStats( df_p, batter_side, label ):
     n_game = df_p_pt.drop_duplicates( subset = [ '試合日時', '先攻チーム', '後攻チーム' ] ).shape[ 0 ]
 
     # 投球回
-    n_inning = round(
+    n_out = (
         len( df_p_pt[ df_p_pt[ '打者状況' ] == 'アウト' ] ) +
         len( df_p_pt[ df_p_pt[ '一走状況' ].isin( [ '封殺', '投手牽制死', '捕手牽制死' ] ) ] ) +
         len( df_p_pt[ df_p_pt[ '二走状況' ].isin( [ '封殺', '投手牽制死', '捕手牽制死' ] ) ] ) +
-        len( df_p_pt[ df_p_pt[ '三走状況' ].isin( [ '封殺', '投手牽制死', '捕手牽制死' ] ) ] ) / 3,
-        1
+        len( df_p_pt[ df_p_pt[ '三走状況' ].isin( [ '封殺', '投手牽制死', '捕手牽制死' ] ) ] )
     )
+    n_inning = round( n_out / 3, 1 )
 
     # 投球数
     n_pitch = len( df_p_pt )
