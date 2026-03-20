@@ -255,57 +255,53 @@ def _build_side_slide( prs, layout, df_p, batter_side, side_label,
     canvas.spacer()
 
     # 球種割合（左34%）+ カウント別（右66%）横並び
-    _N_B, _N_S = 4, 3
-    pie_w   = CONTENT_W * 0.34
-    count_w = CONTENT_W - pie_w
-    cell_w  = count_w / _N_B
-    cell_h  = cell_w / 3
+    _N_B, _N_S  = 4, 3
+    pie_w       = CONTENT_W * 0.34
+    count_w     = CONTENT_W - pie_w
+    cell_w      = count_w / _N_B
+    cell_h      = cell_w / 3          # figsize=(3,1) → height = width/3
+    header_h    = Inches( 0.18 )
+    total_count_h = header_h + cell_h * _N_S
 
     canvas.add_section_heading( '球種割合 / カウント別球種割合' )
 
     fig_pie = pt_pieChart( df_p, pitch_type_colors, batter_side = batter_side )
-    buf_pie = _fig_to_buf( fig_pie, dpi = 150 )
+    buf_pie = _fig_to_buf( fig_pie, dpi = 200 )
     pie_h   = _image_height( buf_pie, pie_w )
 
-    # カウント別グリッドを1枚の画像に合成
-    import matplotlib.gridspec as gridspec
-    fig_grid = plt.figure( figsize = ( float( count_w ) / 914400,
-                                       float( pie_h   ) / 914400 ) )
-    gs = gridspec.GridSpec( _N_S + 1, _N_B, figure = fig_grid,
-                            hspace = 0.05, wspace = 0.05 )
+    combined_h = max( pie_h, total_count_h )
+    canvas._ensure( combined_h )
+
+    # 球種割合（左）
+    buf_pie.seek( 0 )
+    canvas.slide.shapes.add_picture( buf_pie, MARGIN, canvas._y,
+                                     width = pie_w, height = pie_h )
+
+    # カウント別ヘッダー行
     for b in range( _N_B ):
-        ax = fig_grid.add_subplot( gs[ 0, b ] )
-        ax.text( 0.5, 0.5, f'B={b}', ha = 'center', va = 'center',
-                 fontsize = 6, color = '#555555' )
-        ax.axis( 'off' )
+        _add_text( canvas.slide, f'B={b}',
+                   MARGIN + pie_w + cell_w * b, canvas._y,
+                   cell_w, header_h,
+                   font_size = 6, color = RGBColor( 0x55, 0x55, 0x55 ) )
+
+    # カウント別パイチャート（各セルを直接配置・高 DPI）
     for s in range( _N_S ):
         for b in range( _N_B ):
-            ax = fig_grid.add_subplot( gs[ s + 1, b ] )
             sub_fig = pt_pieChart( df_p, pitch_type_colors,
-                                   batter_side  = batter_side,
+                                   batter_side = batter_side,
                                    S = s, B = b,
-                                   show_labels  = False,
-                                   figsize      = ( 3.0, 1.0 ),
-                                   count_label  = f'{b}-{s}' )
-            buf_sub = _fig_to_buf( sub_fig, dpi = 80 )
+                                   show_labels = False,
+                                   figsize     = ( 3.0, 1.0 ),
+                                   count_label = f'{b}-{s}' )
+            buf_sub = _fig_to_buf( sub_fig, dpi = 200 )
             buf_sub.seek( 0 )
-            from matplotlib.image import imread
-            import numpy as np
-            arr = plt.imread( buf_sub )
-            ax.imshow( arr )
-            ax.axis( 'off' )
-    fig_grid.tight_layout( pad = 0.1 )
-    buf_grid = _fig_to_buf( fig_grid, dpi = 100 )
+            canvas.slide.shapes.add_picture(
+                buf_sub,
+                MARGIN + pie_w + cell_w * b,
+                canvas._y + header_h + cell_h * s,
+                width = cell_w, height = cell_h,
+            )
 
-    # 横並びで配置
-    combined_h = max( pie_h, _image_height( buf_grid, count_w ) )
-    canvas._ensure( combined_h )
-    buf_pie.seek( 0 )
-    canvas.slide.shapes.add_picture( buf_pie,  MARGIN,          canvas._y,
-                                     width = pie_w,   height = pie_h )
-    buf_grid.seek( 0 )
-    canvas.slide.shapes.add_picture( buf_grid, MARGIN + pie_w,  canvas._y,
-                                     width = count_w, height = _image_height( buf_grid, count_w ) )
     canvas._y += combined_h + GAP
     canvas.spacer()
 
