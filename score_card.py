@@ -173,20 +173,29 @@ def _scorebook_df( df: pd.DataFrame, side: str, innings: list ) -> pd.DataFrame:
     # 全打席（未完了含む）: 守備位置の変化追跡に使う
     df_side_all = df[ df[ '表裏' ] == side ].sort_values( 'プレイの番号' )
 
-    # (打順, 選手名) の初回出現順リスト
-    seen: dict = {}
-    entry_keys: list = []
+    # 打順ごとに出現順の選手リストを構築
+    # → 同打順内では時系列順、打順間は打順番号順に並べる
+    from collections import defaultdict as _dd
+    order_players_seq: dict = _dd( list )
+    seen_keys: set = set()
     for _, row in df_ab.iterrows():
         o = row[ '打順' ]
         n = str( row[ '打者氏名' ] or '' )
         if pd.notna( o ):
             k = ( int( o ), n )
-            if k not in seen:
-                seen[ k ] = True
-                entry_keys.append( k )
+            if k not in seen_keys:
+                seen_keys.add( k )
+                order_players_seq[ int( o ) ].append( n )
 
-    if not entry_keys:
+    if not order_players_seq:
         return pd.DataFrame()
+
+    # 打順昇順 → 各打順内は出現順（代打は元選手の直下に来る）
+    entry_keys = [
+        ( order, name )
+        for order in sorted( order_players_seq.keys() )
+        for name  in order_players_seq[ order ]
+    ]
 
     records = []
     for order, name in entry_keys:
