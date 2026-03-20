@@ -255,13 +255,11 @@ def _build_side_slide( prs, layout, df_p, batter_side, side_label,
     canvas.spacer()
 
     # 球種割合（左34%）+ カウント別（右66%）横並び
-    _N_B, _N_S  = 4, 3
-    pie_w       = CONTENT_W * 0.34
-    count_w     = CONTENT_W - pie_w
-    cell_w      = count_w / _N_B
-    cell_h      = cell_w / 3          # figsize=(3,1) → height = width/3
-    header_h    = Inches( 0.18 )
-    total_count_h = header_h + cell_h * _N_S
+    _N_B, _N_S = 4, 3
+    pie_w      = CONTENT_W * 0.34
+    count_w    = CONTENT_W - pie_w
+    cell_w     = count_w / _N_B
+    header_h   = Inches( 0.18 )
 
     canvas.add_section_heading( '球種割合 / カウント別球種割合' )
 
@@ -269,7 +267,15 @@ def _build_side_slide( prs, layout, df_p, batter_side, side_label,
     buf_pie = _fig_to_buf( fig_pie, dpi = 200 )
     pie_h   = _image_height( buf_pie, pie_w )
 
-    combined_h = max( pie_h, total_count_h )
+    # セル高さを実画像から取得（tight保存でfigsize比率とずれるため）
+    ref_fig = pt_pieChart( df_p, pitch_type_colors, batter_side = batter_side,
+                           S = 0, B = 0, show_labels = False,
+                           figsize = ( 3.0, 1.0 ), count_label = '0-0' )
+    ref_buf = _fig_to_buf( ref_fig, dpi = 200 )
+    cell_h  = _image_height( ref_buf, cell_w )
+
+    total_count_h = header_h + cell_h * _N_S
+    combined_h    = max( pie_h, total_count_h )
     canvas._ensure( combined_h )
 
     # 球種割合（左）
@@ -284,7 +290,7 @@ def _build_side_slide( prs, layout, df_p, batter_side, side_label,
                    cell_w, header_h,
                    font_size = 6, color = RGBColor( 0x55, 0x55, 0x55 ) )
 
-    # カウント別パイチャート（各セルを直接配置・高 DPI）
+    # カウント別パイチャート（width のみ指定してアスペクト比を保持）
     for s in range( _N_S ):
         for b in range( _N_B ):
             sub_fig = pt_pieChart( df_p, pitch_type_colors,
@@ -299,7 +305,7 @@ def _build_side_slide( prs, layout, df_p, batter_side, side_label,
                 buf_sub,
                 MARGIN + pie_w + cell_w * b,
                 canvas._y + header_h + cell_h * s,
-                width = cell_w, height = cell_h,
+                width = cell_w,   # height は省略してアスペクト比自動計算
             )
 
     canvas._y += combined_h + GAP
