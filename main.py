@@ -11,6 +11,7 @@ import auth as _auth
 import db_admin
 import main_page
 import member
+import pitcher_analysis
 from db import game_repo, player_repo, schema, user_repo
 import extra_streamlit_components as _stx
 
@@ -262,7 +263,7 @@ if st.session_state.page_ctg == "start":
     has_teams = bool( player_repo.list_teams() )
     has_games = bool( game_repo.list_games( team_id = _logged_tid ) )
 
-    col1, col2, col3 = st.columns( 3 )
+    col1, col2, col3, col4 = st.columns( 4 )
     with col1:
         st.markdown( "#### ▶️ 試合開始" )
         st.caption( "チーム・メンバーを設定して試合を記録します" )
@@ -280,6 +281,7 @@ if st.session_state.page_ctg == "start":
         st.caption( "中断した試合の記録を続けます" )
         if st.button( "入力再開", disabled = not has_games, use_container_width = True ):
             st.session_state["pending_game_select"] = True
+            st.session_state.pop( "pending_analysis_select", None )
             st.rerun()
     with col3:
         st.markdown( "#### 🗄️ データ確認" )
@@ -287,6 +289,26 @@ if st.session_state.page_ctg == "start":
         if st.button( "データベース確認・CSV保存", use_container_width = True ):
             st.session_state.page_ctg = "db_admin"
             st.rerun()
+    with col4:
+        st.markdown( "#### 📊 データ分析" )
+        st.caption( "記録データを分析・可視化します" )
+        if st.button( "データ分析", disabled = not has_games, use_container_width = True ):
+            st.session_state["pending_analysis_select"] = True
+            st.session_state.pop( "pending_game_select", None )
+            st.rerun()
+
+    if st.session_state.get( "pending_analysis_select" ):
+        st.divider()
+        st.markdown( "#### 分析モードを選択してください" )
+        _ac1, _ac2 = st.columns( 2 )
+        with _ac1:
+            if st.button( "⚾ 投手分析", type = "primary", use_container_width = True ):
+                st.session_state.page_ctg = "pitcher_analysis"
+                st.session_state.pop( "pending_analysis_select", None )
+                st.rerun()
+        with _ac2:
+            st.button( "🏃 打者分析", disabled = True, use_container_width = True )
+            st.caption( "（準備中）" )
 
     if st.session_state.get( "pending_game_select" ):
         games = game_repo.list_games( team_id = _logged_tid )
@@ -636,6 +658,9 @@ elif st.session_state.page_ctg == "member":
         st.session_state.temp_list[78:86] = updated_top_poses, updated_top_names, updated_top_nums, updated_top_lrs, updated_bottom_poses, updated_bottom_names, updated_bottom_nums, updated_bottom_lrs
         st.session_state.temp_list[7:9] = 後攻チーム, 先攻チーム
         st.session_state["already_rerun"] = False
+
+elif st.session_state.page_ctg == "pitcher_analysis":
+    pitcher_analysis.show()
 
 elif st.session_state.page_ctg == "db_admin":
     db_admin.run()

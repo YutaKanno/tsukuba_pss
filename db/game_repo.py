@@ -87,6 +87,25 @@ _PLAY_DATA_COLS = [
 _JSON_COLS = frozenset(['top_poses', 'top_names', 'top_nums', 'top_lrs', 'bottom_poses', 'bottom_names', 'bottom_nums', 'bottom_lrs', 'top_score', 'bottom_score'])
 
 
+def get_all_plays_df(team_id: int):
+    """Return all play data for games owned by team_id as a pandas DataFrame."""
+    import pandas as pd
+    conn = schema.get_conn()
+    c = conn.cursor()
+    c.execute(
+        'SELECT * FROM play_data WHERE 試合_id IN '
+        '(SELECT id FROM game WHERE owner_team_id = ?) '
+        'ORDER BY 試合_id, プレイの番号',
+        (team_id,),
+    )
+    rows = c.fetchall()
+    conn.close()
+    if not rows:
+        return pd.DataFrame( columns = _PLAY_DATA_COLS )
+    data = [ _db_row_to_list( r ) for r in rows ]
+    return pd.DataFrame( data, columns = _PLAY_DATA_COLS )
+
+
 def _db_row_to_list(r: tuple) -> list:
     """Restore one play_data row to all_list row (88 elements)."""
     def load_json(s):
