@@ -7,7 +7,6 @@ import matplotlib
 matplotlib.use( 'Agg' )
 import matplotlib.pyplot as plt
 from matplotlib import font_manager
-from matplotlib.patches import Rectangle
 import pandas as pd
 import streamlit as st
 
@@ -18,9 +17,60 @@ _HIT_RESULTS   = frozenset( { '単打', '二塁打', '三塁打', '本塁打' } 
 _K_RESULTS     = frozenset( { '見三振', '空三振', '振逃' } )
 _BB_RESULTS    = frozenset( { '四球', '死球' } )
 _ERROR_RESULTS = frozenset( { 'エラー' } )
+_SAC_RESULTS   = frozenset( { '犠打', '犠飛' } )
 
-_HEADER_COLOR = '#1A3A5C'
-_ROW_ALT      = '#EEF2F5'
+# PDF セル文字色
+_COLOR_HIT = '#DC2626'   # 赤（ヒット）
+_COLOR_BB  = '#2563EB'   # 青（四死球・エラー）
+_COLOR_SAC = '#16A34A'   # 緑（犠打・犠飛）
+
+
+def _result_color( text: str ):
+    """打席結果テキストに対応する PDF 文字色を返す（なければ None）。
+
+    '単打 / 三振' のような打者一巡表記は全パーツを確認し優先度で判定:
+    ヒット > 四死球/エラー > 犠打/犠飛
+    （1セルは単色テキストのため複数色には対応不可）
+    """
+    parts = [ p.strip() for p in text.split( '/' ) ]
+    if any( p in _HIT_RESULTS for p in parts ):
+        return _COLOR_HIT
+    if any( p in _BB_RESULTS or p in _ERROR_RESULTS for p in parts ):
+        return _COLOR_BB
+    if any( p in _SAC_RESULTS for p in parts ):
+        return _COLOR_SAC
+    return None
+
+
+def _scorebook_color_fn( df: 'pd.DataFrame' ):
+    """スコアブック用セル文字色関数を返す（イニング列のみ適用）。"""
+    col_headers = [ str( df.index.name ) ] + df.columns.tolist()
+    inning_cols = { i for i, h in enumerate( col_headers ) if h.isdigit() }
+
+    def fn( r, col, text ):
+        if col not in inning_cols or not text:
+            return None
+        return _result_color( text )
+
+    return fn
+
+
+def _score_table_color_fn( df: 'pd.DataFrame' ):
+    """スコアテーブル用セル文字色関数を返す（点が入ったイニング列を赤）。"""
+    col_headers = [ str( df.index.name ) ] + df.columns.tolist()
+    inning_cols = { i for i, h in enumerate( col_headers ) if h.isdigit() }
+
+    def fn( r, col, text ):
+        if col not in inning_cols:
+            return None
+        try:
+            if int( text ) > 0:
+                return _COLOR_HIT
+        except ( ValueError, TypeError ):
+            pass
+        return None
+
+    return fn
 
 
 def _register_fonts() -> None:
@@ -211,12 +261,17 @@ def _scorebook_df( df: pd.DataFrame, side: str, innings: list ) -> pd.DataFrame:
             pos = _safe_position( r[ poses_col ], order )
             if pos and ( not positions or positions[ -1 ] != pos ):
                 positions.append( pos )
-        pos_display = ' → '.join( positions ) if positions else ''
+        pos_display = ''.join( positions ) if positions else ''
+
+        # 打席左右（最初の非 null 値を使用）
+        lr_series = player_ab[ '打席左右' ].dropna()
+        lr_val    = str( lr_series.iloc[ 0 ] ) if not lr_series.empty else ''
 
         row_data: dict = {
             '打順'   : order,
-            '選手名' : name,
             '守備位置': pos_display,
+            '選手名' : name,
+            '打席左右': lr_val,
         }
         for inn in innings:
             # 同一イニングに複数打席（打者一巡）は「/」で列挙
@@ -227,13 +282,43 @@ def _scorebook_df( df: pd.DataFrame, side: str, innings: list ) -> pd.DataFrame:
     return pd.DataFrame( records ).set_index( '打順' )
 
 
+_NON_OUT_RESULTS = _HIT_RESULTS | _BB_RESULTS | _ERROR_RESULTS
+
+
+def _format_ip( outs: int ) -> str:
+    """アウト数を投球回表記に変換（例: 7 → '2⅓'）。"""
+    full = outs // 3
+    rem  = outs % 3
+    if rem == 0:
+        return str( full )
+    frac = '⅓' if rem == 1 else '⅔'
+    return f'{ full }{ frac }' if full > 0 else frac
+
+
 def _pitcher_df( df: pd.DataFrame, batting_side: str ) -> pd.DataFrame:
     """投手スコアテーブル。
 
     batting_side='表': 先攻打席 → 後攻投手のスコア
     batting_side='裏': 後攻打席 → 先攻投手のスコア
+
+    投手名は全プレイ（投球含む）から取得し、完了打席がなくても
+    投球数だけ記録されている場合も表示できるようにする。
     """
-    df_s  = df[ df[ '表裏' ] == batting_side ]
+    df_s = df[ df[ '表裏' ] == batting_side ]
+
+    if df_s.empty:
+        return pd.DataFrame()
+
+    # 投手名は全プレイから（完了打席がなくても名前を取得できる）
+    pitcher_order = (
+        df_s.dropna( subset = [ '投手氏名' ] )
+            .drop_duplicates( '投手氏名' )[ '投手氏名' ]
+            .tolist()
+    )
+    if not pitcher_order:
+        return pd.DataFrame()
+
+    # 完了打席（投球回・H/K/B 集計に使用）
     df_ab = df_s[
         ( df_s[ '打席の継続' ] == '打席完了' ) &
         ( df_s[ '打席結果' ].notna()         ) &
@@ -241,14 +326,9 @@ def _pitcher_df( df: pd.DataFrame, batting_side: str ) -> pd.DataFrame:
         ( df_s[ '打席結果' ]  != ''          )
     ]
 
-    if df_ab.empty:
-        return pd.DataFrame()
-
-    pitcher_order = df_ab.drop_duplicates( '投手氏名' )[ '投手氏名' ].tolist()
-
     records = []
     for pitcher in pitcher_order:
-        grp     = df_ab[ df_ab[ '投手氏名' ] == pitcher ]
+        grp     = df_ab[ df_ab[ '投手氏名' ] == pitcher ] if not df_ab.empty else df_ab
         results = grp[ '打席結果' ].tolist()
 
         total_pitches = df_s[
@@ -256,8 +336,12 @@ def _pitcher_df( df: pd.DataFrame, batting_side: str ) -> pd.DataFrame:
             ( df_s[ 'プレイの種類' ] == '投球'  )
         ].shape[ 0 ]
 
+        # 投球回：ヒット・四死球・エラー以外の完了打席をアウトとみなす
+        outs = sum( 1 for r in results if r not in _NON_OUT_RESULTS and r )
+
         records.append( {
             '投手'  : pitcher,
+            '投球回': _format_ip( outs ),
             '投球数': total_pitches,
             '打者数': len( grp ),
             'H'     : sum( 1 for r in results if r in _HIT_RESULTS ),
@@ -273,59 +357,111 @@ def _pitcher_df( df: pd.DataFrame, batting_side: str ) -> pd.DataFrame:
 _PDF_FONTSIZE = 8
 _ROW_H_IN     = 0.28   # 1データ行あたりの高さ（インチ）
 
+# モダンカラーパレット
+_PC_HDR_BG   = '#1E293B'   # ヘッダー背景（ダークネイビー）
+_PC_HDR_TEXT = '#FFFFFF'   # ヘッダー文字
+_PC_IDX_BG   = '#E2E8F0'   # インデックス列背景
+_PC_IDX_TEXT = '#334155'   # インデックス列文字
+_PC_ROW_ODD  = '#F8FAFC'   # 奇数データ行
+_PC_ROW_EVEN = '#FFFFFF'   # 偶数データ行
+_PC_EDGE     = '#CBD5E1'   # 罫線
+_PC_ACCENT   = '#3B82F6'   # セクションタイトルアクセント
 
-def _draw_table_on_ax( ax: plt.Axes, df: pd.DataFrame, title: str ) -> None:
-    """DataFrame を1つの Axes にスタイル付きテーブルとして描画する。"""
+
+def _draw_table_on_ax(
+    ax: plt.Axes,
+    df: pd.DataFrame,
+    title: str,
+    cell_text_color_fn  = None,
+    compact_cols: set   = None,
+    blank_header_cols: set = None,
+) -> None:
+    """DataFrame を1つの Axes にスタイル付きテーブルとして描画する。
+
+    Parameters
+    ----------
+    cell_text_color_fn : callable(r, col, text) -> str | None
+        データセルの文字色を返す関数。None のとき色付けなし。
+    compact_cols : set of str
+        列名を空白にして幅を1文字分（1.0倍補正）に抑えたい列名の集合。
+    blank_header_cols : set of str
+        列名を空白にするが幅は通常（1.5倍補正）の列名の集合。
+    """
     ax.axis( 'off' )
+    ax.set_facecolor( 'white' )
+
     if df.empty:
         ax.text( 0.5, 0.5, 'データなし', ha = 'center', va = 'center',
-                 fontsize = _PDF_FONTSIZE, transform = ax.transAxes )
+                 fontsize = _PDF_FONTSIZE, color = '#64748B',
+                 transform = ax.transAxes )
         return
 
-    ax.set_title( title, fontsize = _PDF_FONTSIZE + 1, fontweight = 'bold',
-                  loc = 'left', pad = 3 )
+    if title:
+        ax.set_title(
+            title,
+            fontsize   = _PDF_FONTSIZE + 1,
+            fontweight = 'bold',
+            color      = '#1E293B',
+            loc        = 'left',
+            pad        = 4,
+        )
 
-    n_cols    = len( df.columns )
-    all_text  = [ df.columns.tolist() ] + df.fillna( '' ).astype( str ).values.tolist()
-    row_labels = [ '' ] + [ str( i ) for i in df.index ]
-    total_row  = len( all_text )
+    # インデックスを通常列に含めることで auto_set_column_width の対象にする
+    # （rowLabels は auto_set_column_width が効かないため列幅が異常に広くなる）
+    df_disp     = df.reset_index()
+    col_headers = df_disp.columns.tolist()
+    n_cols      = len( col_headers )
+
+    # ヘッダー非表示 index セットを構築
+    compact_idxs      = { i for i, h in enumerate( col_headers ) if compact_cols      and h in compact_cols      }
+    blank_header_idxs = { i for i, h in enumerate( col_headers ) if blank_header_cols and h in blank_header_cols }
+    hidden_header_idxs = compact_idxs | blank_header_idxs
+
+    # ヘッダー行で非表示対象の列名を空白にする
+    display_headers = [
+        '' if i in hidden_header_idxs else h
+        for i, h in enumerate( col_headers )
+    ]
+    all_text  = [ display_headers ] + df_disp.fillna( '' ).astype( str ).values.tolist()
+    total_row = len( all_text )
 
     table = ax.table(
-        cellText  = all_text,
-        rowLabels = row_labels,
-        cellLoc   = 'center',
-        bbox      = [ 0, 0, 1, 1 ],
+        cellText = all_text,
+        cellLoc  = 'center',
+        bbox     = [ 0, 0, 1, 1 ],
     )
-    table.set_zorder( 2 )
     table.auto_set_font_size( False )
     table.set_fontsize( _PDF_FONTSIZE )
     table.auto_set_column_width( list( range( n_cols ) ) )
-    table.scale( 1, 1.2 )
+    table.scale( 1, 1.25 )
 
+    # Linux/CJK 文字幅補正
+    # compact 列は 1.0 倍（1文字分幅）、それ以外は 1.5 倍
     for col in range( n_cols ):
+        mult = 1.0 if col in compact_idxs else 1.5
         for r in range( total_row ):
             if ( r, col ) in table._cells:
                 w = table._cells[ r, col ].get_width()
-                table._cells[ r, col ].set_width( w * 1.5 )
+                table._cells[ r, col ].set_width( w * mult )
 
-    ax.figure.canvas.draw()
+    # セル着色を cell.set_facecolor() で直接指定（platform に依存しない）
+    for ( r, col ), cell in table._cells.items():
+        cell.set_edgecolor( _PC_EDGE )
+        cell.set_linewidth( 0.3 )
+        cell.PAD = 0.04
 
-    def _patch( row_idx, col_s, col_e, color ):
-        first  = table[ row_idx, col_s ]
-        last   = table[ row_idx, col_e ]
-        x0, y0 = first.get_xy()
-        x1     = last.get_xy()[ 0 ] + last.get_width()
-        h      = first.get_height()
-        ax.add_patch( Rectangle( ( x0, y0 ), x1 - x0, h,
-                                  facecolor = color, edgecolor = 'none',
-                                  transform = ax.transAxes, zorder = 1 ) )
-
-    _patch( 0, 0, n_cols - 1, _HEADER_COLOR )
-    for r in range( 1, total_row ):
-        _patch( r, 0, n_cols - 1, _ROW_ALT if r % 2 == 0 else 'white' )
-    for col in range( n_cols ):
-        if ( 0, col ) in table._cells:
-            table._cells[ 0, col ].set_text_props( color = 'white', fontweight = 'bold' )
+        if r == 0:                          # ヘッダー行
+            cell.set_facecolor( _PC_HDR_BG )
+            cell.set_text_props( color = _PC_HDR_TEXT, fontweight = 'bold' )
+        elif col == 0:                      # インデックス列（元 rowLabels）
+            cell.set_facecolor( _PC_IDX_BG )
+            cell.set_text_props( color = _PC_IDX_TEXT, fontweight = 'bold' )
+        else:                               # データセル
+            cell.set_facecolor( _PC_ROW_ODD if r % 2 == 1 else _PC_ROW_EVEN )
+            if cell_text_color_fn is not None:
+                tc = cell_text_color_fn( r, col, cell.get_text().get_text() )
+                if tc:
+                    cell.set_text_props( color = tc )
 
 
 def generate_score_card_pdf(
@@ -384,17 +520,29 @@ def generate_score_card_pdf(
         wspace       = 0.25,
     )
 
+    # 色付け関数
+    score_color  = _score_table_color_fn( score_data ) if not score_data.empty else None
+    top_sb_color = _scorebook_color_fn( top_sb )       if not top_sb.empty   else None
+    bot_sb_color = _scorebook_color_fn( bot_sb )       if not bot_sb.empty   else None
+
     # スコア（2列連結）
     ax_score = fig.add_subplot( gs[ 0, : ] )
-    _draw_table_on_ax( ax_score, score_data, 'スコア' )
+    _draw_table_on_ax( ax_score, score_data, 'スコア',
+                       cell_text_color_fn = score_color )
 
     # 先攻スコアブック（2列連結）
     ax_top = fig.add_subplot( gs[ 1, : ] )
-    _draw_table_on_ax( ax_top, top_sb, f'先攻スコアブック：{ top_team }' )
+    _draw_table_on_ax( ax_top, top_sb, f'先攻スコアブック：{ top_team }',
+                       cell_text_color_fn = top_sb_color,
+                       compact_cols       = { '打席左右' },
+                       blank_header_cols  = { '打順', '選手名', '守備位置' } )
 
     # 後攻スコアブック（2列連結）
     ax_bot = fig.add_subplot( gs[ 2, : ] )
-    _draw_table_on_ax( ax_bot, bot_sb, f'後攻スコアブック：{ bot_team }' )
+    _draw_table_on_ax( ax_bot, bot_sb, f'後攻スコアブック：{ bot_team }',
+                       cell_text_color_fn = bot_sb_color,
+                       compact_cols       = { '打席左右' },
+                       blank_header_cols  = { '打順', '選手名', '守備位置' } )
 
     # 投手スコア（左右 2列）
     ax_p1 = fig.add_subplot( gs[ 3, 0 ] )
