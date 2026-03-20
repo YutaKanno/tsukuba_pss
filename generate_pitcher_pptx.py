@@ -83,11 +83,15 @@ def _add_text( slide, text, left, top, width, height,
 class _Canvas:
     """スライドへの順次配置。オーバーフロー時に新スライドを追加。"""
 
-    def __init__( self, prs: Presentation, blank_layout, top_start ):
-        self._prs      = prs
-        self._layout   = blank_layout
+    def __init__( self, prs: Presentation, blank_layout, top_start, first_slide = None ):
+        self._prs       = prs
+        self._layout    = blank_layout
         self._top_start = top_start
-        self._new_slide()
+        if first_slide is not None:
+            self.slide = first_slide
+            self._y    = top_start
+        else:
+            self._new_slide()
 
     def _new_slide( self ):
         self.slide = self._prs.slides.add_slide( self._layout )
@@ -171,15 +175,13 @@ def _build_summary_slide(
     start_date, end_date,
     pitch_type_colors, comment,
 ):
-    # 最初のスライドを手動で追加してヘッダーを描く
     first_slide = prs.slides.add_slide( layout )
     _add_page_header( first_slide, selected_pitcher, selected_team,
                       str( start_date ), str( end_date ) )
 
-    canvas = _Canvas( prs, layout, top_start = _page_header_height() + Inches( 0.2 ) )
-    # 最初のスライドを canvas に差し替え
-    canvas.slide = first_slide
-    canvas._y    = _page_header_height() + Inches( 0.2 )
+    canvas = _Canvas( prs, layout,
+                      top_start  = _page_header_height() + Inches( 0.2 ),
+                      first_slide = first_slide )
 
     # 総合スタッツ
     pitcher_label  = f'{selected_pitcher} 全体'
@@ -232,9 +234,9 @@ def _build_side_slide( prs, layout, df_p, batter_side, side_label,
     first_slide = prs.slides.add_slide( layout )
     _add_side_header( first_slide, f'vs {side_label}' )
 
-    canvas = _Canvas( prs, layout, top_start = Inches( 0.45 ) + Inches( 0.2 ) )
-    canvas.slide = first_slide
-    canvas._y    = Inches( 0.45 ) + Inches( 0.2 )
+    canvas = _Canvas( prs, layout,
+                      top_start   = Inches( 0.45 ) + Inches( 0.2 ),
+                      first_slide = first_slide )
 
     pt_list = calc_ptList( df_p, batter_side = batter_side )
     if not pt_list:
