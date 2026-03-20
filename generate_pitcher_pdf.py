@@ -22,7 +22,7 @@ from reportlab.platypus import Image as RLImage
 
 from pitching.calc_ptList import calc_ptList
 from pitching.calc_stats import (
-    calc_stats, convert_stats_dict_to_df, calc_overallStats,
+    calc_stats, convert_stats_dict_to_df, calc_overallStats, calc_appearance_history,
 )
 from pitching.plot_statsTable       import plot_statsTable
 from pitching.plot_overallStatsTable import plot_overallStatsTable
@@ -262,6 +262,58 @@ def _course_grid( df_p, batter_side, pt_list, font ) -> Table:
     return t
 
 
+_HISTORY_COLS = [ '試合日時', '先攻チーム', '後攻チーム', '投球回', '投球数', '打者数', '被安打数', '四死球数', '失点数' ]
+
+# 列幅比率（合計 1.0）
+_HISTORY_COL_RATIOS = [ 0.14, 0.17, 0.17, 0.08, 0.08, 0.08, 0.10, 0.10, 0.08 ]
+
+
+def _appearance_history_rl_table( df_p: pd.DataFrame, font: str ) -> Table:
+    """登板履歴を reportlab Table で返す（ページまたぎ対応）。"""
+    history_df = calc_appearance_history( df_p )
+
+    col_widths = [ CONTENT_W * r for r in _HISTORY_COL_RATIOS ]
+
+    header_style = ParagraphStyle(
+        'hh', fontName = font, fontSize = 7,
+        textColor = colors.white, alignment = 1, leading = 9,
+    )
+    cell_style = ParagraphStyle(
+        'hc', fontName = font, fontSize = 7,
+        textColor = colors.black, alignment = 1, leading = 9,
+    )
+
+    rows = [ [ Paragraph( c, header_style ) for c in _HISTORY_COLS ] ]
+
+    for _, row in history_df.iterrows():
+        rows.append( [ Paragraph( str( row[ c ] ), cell_style ) for c in _HISTORY_COLS ] )
+
+    t = Table( rows, colWidths = col_widths, repeatRows = 1 )
+
+    n = len( rows )
+    row_bg = []
+    for i in range( 1, n ):
+        bg = colors.white if i % 2 == 1 else COLOR_ROW_ALT
+        row_bg.append( ( 'BACKGROUND', ( 0, i ), ( -1, i ), bg ) )
+
+    t.setStyle( TableStyle( [
+        ( 'BACKGROUND',    ( 0, 0 ), ( -1, 0  ), COLOR_HEADER ),
+        ( 'FONTNAME',      ( 0, 0 ), ( -1, -1 ), font ),
+        ( 'FONTSIZE',      ( 0, 0 ), ( -1, -1 ), 7 ),
+        ( 'ALIGN',         ( 0, 0 ), ( -1, -1 ), 'CENTER' ),
+        ( 'VALIGN',        ( 0, 0 ), ( -1, -1 ), 'MIDDLE' ),
+        ( 'TOPPADDING',    ( 0, 0 ), ( -1, -1 ), 2 ),
+        ( 'BOTTOMPADDING', ( 0, 0 ), ( -1, -1 ), 2 ),
+        ( 'LEFTPADDING',   ( 0, 0 ), ( -1, -1 ), 2 ),
+        ( 'RIGHTPADDING',  ( 0, 0 ), ( -1, -1 ), 2 ),
+        ( 'LINEBELOW',     ( 0, 0 ), ( -1, 0  ), 0.5, colors.white ),
+        ( 'LINEBELOW',     ( 0, 1 ), ( -1, -1 ), 0.3, colors.HexColor( '#CCCCCC' ) ),
+        ( 'BOX',           ( 0, 0 ), ( -1, -1 ), 0.5, colors.HexColor( '#CCCCCC' ) ),
+        *row_bg,
+    ] ) )
+    return t
+
+
 def _build_side_elements( df_p, batter_side, side_label, pitch_type_colors, font ):
     elements = []
 
@@ -377,6 +429,12 @@ def generate_pitcher_pdf(
             Spacer( 1, 2 * mm ),
             _buf_to_rl( buf_bat, CONTENT_W ),
         ] ) )
+
+    # 登板履歴（行数が多い場合でもページをまたいで表示）
+    story.append( Spacer( 1, 4 * mm ) )
+    story.append( _section_heading( '登板履歴', font ) )
+    story.append( Spacer( 1, 2 * mm ) )
+    story.append( _appearance_history_rl_table( df_p, font ) )
 
     # コメント
     if comment and comment.strip():
