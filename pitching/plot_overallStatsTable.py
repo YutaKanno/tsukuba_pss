@@ -61,7 +61,7 @@ def plot_overallStatsTable( df: pd.DataFrame ) -> plt.Figure:
     all_text  = [ display_cols ] + df_disp.values.tolist()
     total_row = len( all_text )
 
-    figsize = ( col_count * 0.72, total_row * 0.42 )
+    figsize = ( col_count * 0.88, total_row * 0.42 )
 
     fig, ax = plt.subplots( figsize = figsize, dpi = 300 )
     ax.axis( 'off' )
@@ -73,16 +73,16 @@ def plot_overallStatsTable( df: pd.DataFrame ) -> plt.Figure:
     )
     table.set_zorder( 2 )
     table.auto_set_font_size( False )
-    table.set_fontsize( 13 )
+    table.set_fontsize( 11 )
     table.auto_set_column_width( list( range( col_count ) ) )
     table.scale( 1, 1.4 )
 
-    # Linux/Docker フォントメトリクス対策
+    # Linux/Docker フォントメトリクス対策（CJK 文字幅が過小評価されるため補正）
     for col in range( col_count ):
         for r in range( total_row ):
             if ( r, col ) in table._cells:
                 w = table._cells[ r, col ].get_width()
-                table._cells[ r, col ].set_width( w * 1.25 )
+                table._cells[ r, col ].set_width( w * 1.65 )
 
     # ── vline 制御 ────────────────────────────────────────────────
     vline_indices = { i for i, c in enumerate( cols ) if c in _VLINE_AFTER }
