@@ -50,6 +50,7 @@ def _fig_to_buf( fig, dpi: int = 180 ) -> io.BytesIO:
 
 
 def _image_height( buf: io.BytesIO, display_width ) -> Emu:
+    PILImage.MAX_IMAGE_PIXELS = None  # decompression bomb チェックを無効化
     buf.seek( 0 )
     iw, ih = PILImage.open( buf ).size
     buf.seek( 0 )
@@ -266,8 +267,8 @@ def _build_side_slide( prs, layout, df_p, batter_side, side_label,
 
     # カウント別グリッドを1枚の画像に合成
     import matplotlib.gridspec as gridspec
-    fig_grid = plt.figure( figsize = ( float( count_w ) / 914400 * 72,
-                                       float( pie_h   ) / 914400 * 72 ) )
+    fig_grid = plt.figure( figsize = ( float( count_w ) / 914400,
+                                       float( pie_h   ) / 914400 ) )
     gs = gridspec.GridSpec( _N_S + 1, _N_B, figure = fig_grid,
                             hspace = 0.05, wspace = 0.05 )
     for b in range( _N_B ):
