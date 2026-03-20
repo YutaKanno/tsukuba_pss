@@ -293,6 +293,46 @@ def calc_overallStats( df_p, batter_side, label ):
     }
 
 
+def calc_appearance_history( df_p: pd.DataFrame ) -> pd.DataFrame:
+    """登板履歴を試合ごとに集計して DataFrame で返す。"""
+    df = df_p[ df_p[ '打撃結果' ] != '0' ].copy()
+
+    records = []
+    for (date, away, home), grp in df.groupby( [ '試合日時', '先攻チーム', '後攻チーム' ], sort = False ):
+
+        # 投球回
+        n_out = (
+            len( grp[ grp[ '打者状況' ] == 'アウト' ] ) +
+            len( grp[ grp[ '一走状況' ].isin( [ '封殺', '投手牽制死', '捕手牽制死' ] ) ] ) +
+            len( grp[ grp[ '二走状況' ].isin( [ '封殺', '投手牽制死', '捕手牽制死' ] ) ] ) +
+            len( grp[ grp[ '三走状況' ].isin( [ '封殺', '投手牽制死', '捕手牽制死' ] ) ] )
+        )
+        n_inning = round( n_out / 3, 1 )
+
+        n_pitch = len( grp )
+        n_pa    = len( grp[ grp[ '打席の継続' ] == '打席完了' ] )
+        n_hit   = len( grp[ grp[ '打撃結果' ].isin( [ '単打', '二塁打', '三塁打', '本塁打' ] ) ] )
+        n_bb    = len( grp[ grp[ '打撃結果' ].isin( [ '四球', '死球' ] ) ] )
+        n_runs  = len( grp[ grp[ '打者状況' ] == '本進' ] )
+
+        records.append( {
+            '試合日時':   str( date )[ :10 ],
+            '先攻チーム': away,
+            '後攻チーム': home,
+            '投球回':     n_inning,
+            '投球数':     n_pitch,
+            '打者数':     n_pa,
+            '被安打数':   n_hit,
+            '四死球数':   n_bb,
+            '失点数':     n_runs,
+        } )
+
+    result = pd.DataFrame( records )
+    if not result.empty:
+        result = result.sort_values( '試合日時', ascending = False ).reset_index( drop = True )
+    return result
+
+
 def convert_stats_dict_to_df( stats_dict: dict ) -> pd.DataFrame:
     rows = {}
     for key, val in stats_dict.items():

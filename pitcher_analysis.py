@@ -12,7 +12,7 @@ import streamlit as st
 from db import game_repo
 from db import comment_repo
 from pitching.calc_ptList import calc_ptList
-from pitching.calc_stats import calc_stats, convert_stats_dict_to_df, calc_overallStats
+from pitching.calc_stats import calc_stats, convert_stats_dict_to_df, calc_overallStats, calc_appearance_history
 from pitching.plot_statsTable import plot_statsTable
 from pitching.plot_overallStatsTable import plot_overallStatsTable
 from pitching.plot_pt_pieChart import pt_pieChart
@@ -20,6 +20,7 @@ from pitching.plot_courceDist import course_distPlot
 from pitching.plot_courseDetail import course_detailPlot
 from pitching.plot_battedBall import batted_ball_plot
 from pitching.plot_velocityDist import velocity_dist_plot, batted_type_plot
+from pitching.plot_appearanceHistory import plot_appearance_history
 from generate_pitcher_pdf import generate_pitcher_pdf
 
 
@@ -250,6 +251,14 @@ def show():
             st.image( buf_bat, use_container_width = True )
         else:
             st.info( '被打球データがありません。' )
+
+        st.markdown( '**登板履歴**' )
+        history_df = calc_appearance_history( df_p )
+        buf_hist = plot_appearance_history( history_df )
+        if buf_hist is not None:
+            st.image( buf_hist, use_container_width = True )
+        else:
+            st.info( '登板履歴データがありません。' )
     with tab_r:
         _render_side_tab( df_p, '右', '右打者' )
     with tab_l:
