@@ -1718,7 +1718,7 @@ def main_page(list):
         ]
 
         if not st.session_state.get( '_game_end_sync_done' ):
-            if st.button( "🏁 試合終了（スタートに戻る）", use_container_width = True ):
+            if st.button( "🏁 入力終了（スタート画面に戻る）", use_container_width = True ):
                 # ── DB 登録漏れチェック & 補完 ──
                 gid      = st.session_state.get( 'current_game_id' )
                 mem_list = st.session_state.get( 'all_list', [] )
