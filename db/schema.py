@@ -148,10 +148,23 @@ class _PgConnWrapper:
 
 @st.cache_resource(show_spinner=False)
 def _get_pg_pool():
-    """PostgreSQL接続プールをキャッシュして使い回す（接続コストを削減）。"""
+    """PostgreSQL接続プールをキャッシュして使い回す（接続コストを削減）。
+
+    keepalives を有効にすることで、イニング間などの無操作時間に Supabase 側で
+    TCP 接続がタイムアウトされる問題を防ぐ。
+    """
     import psycopg2.pool
     url = _get_database_url()
-    return psycopg2.pool.SimpleConnectionPool(1, 3, url)
+    # keepalives_idle=30: 30秒無通信でキープアライブパケットを送信
+    # keepalives_interval=10: 応答がなければ10秒ごとに再送
+    # keepalives_count=5: 5回失敗で接続を切断
+    return psycopg2.pool.SimpleConnectionPool(
+        1, 3, url,
+        keepalives=1,
+        keepalives_idle=30,
+        keepalives_interval=10,
+        keepalives_count=5,
+    )
 
 
 def get_conn() -> Union[sqlite3.Connection, _PgConnWrapper]:
@@ -160,25 +173,16 @@ def get_conn() -> Union[sqlite3.Connection, _PgConnWrapper]:
         import psycopg2
 
         def _get_valid_conn(pool):
-            """プールから接続を取得し、生存確認（reset）する。失敗したら例外を上げる。"""
+            """プールから接続を取得し、psycopg2レベルの切断をチェックする。
+            ネットワーク往復なしのローカルチェックのみ行うため遅延ゼロ。"""
             conn = pool.getconn()
-            # closed != 0 は psycopg2 レベルで既に切断済み
+            # closed != 0 は psycopg2 レベルで既に切断済み（ネットワーク通信不要）
             if getattr(conn, 'closed', 0) != 0:
                 try:
                     pool.putconn(conn, close=True)
                 except Exception:
                     pass
                 raise psycopg2.OperationalError("stale connection (closed)")
-            try:
-                # reset() はペンディング中のトランザクションをロールバックし、
-                # ネットワーク切断があれば OperationalError を上げる
-                conn.reset()
-            except Exception:
-                try:
-                    pool.putconn(conn, close=True)
-                except Exception:
-                    pass
-                raise
             conn.autocommit = False
             return _PgConnWrapper(conn, pool)
 
