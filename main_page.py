@@ -428,6 +428,10 @@ def main_page(list):
 
         
     with tab1:
+        # DB保存エラーをrerun後も表示（st.rerun()で消えないようsession_stateから読む）
+        if '_db_insert_error' in st.session_state:
+            _err_msg = st.session_state.pop('_db_insert_error')
+            st.error(f"⚠️ プレイデータのDB保存に失敗しました（もう一度確定ボタンを押すか、運営に連絡してください）\n\n詳細: {_err_msg}")
         container = st.container()
         with container:
             col1, col2 = st.columns(2)
@@ -1350,7 +1354,8 @@ def main_page(list):
                                             owner_team_id=_st.session_state.get("logged_in_team_id"),
                                         )
                                     except Exception as e:
-                                        st.warning(f"プレイデータの保存に失敗しました: {e}")
+                                        # rerun後も表示されるようにsession_stateに保存
+                                        st.session_state['_db_insert_error'] = str(e)
                                 if 'cached_all_list_len' in st.session_state:
                                     st.session_state['cached_all_list_len'] = -1
                                 

@@ -246,14 +246,18 @@ def insert_play(game_id: int, row_list: list, owner_team_id: Optional[int] = Non
     """Insert one play. Raises PermissionError if owner_team_id is given and does not match."""
     d = _row_to_db(game_id, row_list)
     conn = schema.get_conn()
-    c = conn.cursor()
-    if owner_team_id is not None:
-        _assert_owner(c, game_id, owner_team_id)
-    cols = ', '.join(d.keys())
-    placeholders = ', '.join('?' * len(d))
-    c.execute(f'INSERT INTO play_data ({cols}) VALUES ({placeholders})', list(d.values()))
-    conn.commit()
-    conn.close()
+    try:
+        c = conn.cursor()
+        if owner_team_id is not None:
+            _assert_owner(c, game_id, owner_team_id)
+        cols = ', '.join(d.keys())
+        placeholders = ', '.join('?' * len(d))
+        c.execute(f'INSERT INTO play_data ({cols}) VALUES ({placeholders})', list(d.values()))
+        conn.commit()
+    except Exception:
+        raise
+    finally:
+        conn.close()
     _update_game_json_plays(game_id, row_list)
 
 

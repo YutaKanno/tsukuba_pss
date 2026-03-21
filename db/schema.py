@@ -122,8 +122,19 @@ class _PgConnWrapper:
     def commit(self) -> None:
         self._conn.commit()
 
+    def rollback(self) -> None:
+        try:
+            self._conn.rollback()
+        except Exception:
+            pass
+
     def close(self) -> None:
         if self._pool is not None:
+            # プールに戻す前にロールバックして接続を清潔な状態にする
+            try:
+                self._conn.rollback()
+            except Exception:
+                pass
             try:
                 self._pool.putconn(self._conn)
             except Exception:
@@ -147,18 +158,38 @@ def get_conn() -> Union[sqlite3.Connection, _PgConnWrapper]:
     """Return a connection to the app database (SQLite or Supabase PostgreSQL)."""
     if is_postgres():
         import psycopg2
+
+        def _get_valid_conn(pool):
+            """プールから接続を取得し、生存確認（reset）する。失敗したら例外を上げる。"""
+            conn = pool.getconn()
+            # closed != 0 は psycopg2 レベルで既に切断済み
+            if getattr(conn, 'closed', 0) != 0:
+                try:
+                    pool.putconn(conn, close=True)
+                except Exception:
+                    pass
+                raise psycopg2.OperationalError("stale connection (closed)")
+            try:
+                # reset() はペンディング中のトランザクションをロールバックし、
+                # ネットワーク切断があれば OperationalError を上げる
+                conn.reset()
+            except Exception:
+                try:
+                    pool.putconn(conn, close=True)
+                except Exception:
+                    pass
+                raise
+            conn.autocommit = False
+            return _PgConnWrapper(conn, pool)
+
         try:
             pool = _get_pg_pool()
-            conn = pool.getconn()
-            conn.autocommit = False
-            return _PgConnWrapper(conn, pool)
+            return _get_valid_conn(pool)
         except Exception:
-            # プールが枯渇・切断された場合はキャッシュをクリアして再試行
+            # プールが枯渇・接続が切断された場合はキャッシュをクリアして新しいプールで再試行
             _get_pg_pool.clear()
             pool = _get_pg_pool()
-            conn = pool.getconn()
-            conn.autocommit = False
-            return _PgConnWrapper(conn, pool)
+            return _get_valid_conn(pool)
     return sqlite3.connect(DB_FILE)
 
 
