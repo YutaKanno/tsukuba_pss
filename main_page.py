@@ -428,10 +428,16 @@ def main_page(list):
 
         
     with tab1:
-        # DB保存エラーをrerun後も表示（st.rerun()で消えないようsession_stateから読む）
+        # DB保存エラー・イニング同期結果をrerun後も表示（session_stateから読む）
         if '_db_insert_error' in st.session_state:
             _err_msg = st.session_state.pop('_db_insert_error')
             st.error(f"⚠️ プレイデータのDB保存に失敗しました（もう一度確定ボタンを押すか、運営に連絡してください）\n\n詳細: {_err_msg}")
+        if '_inning_sync_result' in st.session_state:
+            _n = st.session_state.pop('_inning_sync_result')
+            st.warning(f"⚠️ イニング終了時に {_n} 件の未登録データをDBに補完しました")
+        if '_inning_sync_error' in st.session_state:
+            _sync_err_msg = st.session_state.pop('_inning_sync_error')
+            st.error(f"⚠️ イニング終了時のDB同期に失敗しました: {_sync_err_msg}")
         container = st.container()
         with container:
             col1, col2 = st.columns(2)
@@ -1415,7 +1421,27 @@ def main_page(list):
                                 
                                 
                                 updated_list = update_list(inputed_list, top_poses, top_names, top_nums, top_lrs, bottom_poses, bottom_names, bottom_nums, bottom_lrs, top_score, bottom_score)
-                                
+
+                                # ── イニング終了時DB同期チェック ──
+                                # 次プレイの回・表裏が変わった = このプレイでイニングが終了
+                                _inning_ended = (
+                                    updated_list[10] != inputed_list[10]
+                                    or updated_list[11] != inputed_list[11]
+                                )
+                                if _inning_ended and gid is not None:
+                                    try:
+                                        from db import game_repo as _igr
+                                        _mem_list = st.session_state.get('all_list', [])
+                                        _db_plays = _igr.get_play_list(gid)
+                                        _db_nums = {row[9] for row in _db_plays if row[9] is not None}
+                                        _missing = [row for row in _mem_list if row[9] not in _db_nums]
+                                        for _row in _missing:
+                                            _igr.insert_play(gid, _row)
+                                        if _missing:
+                                            st.session_state['_inning_sync_result'] = len(_missing)
+                                    except Exception as _sync_err:
+                                        st.session_state['_inning_sync_error'] = str(_sync_err)
+
                                 st.session_state[ 'data_list' ] = updated_list
                                 
                                 st.session_state[ '打撃結果' ], st.session_state[ 'エラー選手' ], エラー選手 = '0', 0, 0 
@@ -1687,6 +1713,8 @@ def main_page(list):
             'last_confirmed_play_key', 'cached_all_list_len', 'already_rerun',
             'reset_flag', 'radio_selection', 'pickoff_selection',
             '_game_end_sync_done', '_game_end_sync_result',
+            '_inning_sync_result', '_inning_sync_error',
+            '_db_insert_error',
         ]
 
         if not st.session_state.get( '_game_end_sync_done' ):
