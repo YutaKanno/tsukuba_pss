@@ -780,7 +780,7 @@ def _cached_stats_list_image(
     if _df_s.empty:
         return None
     fig = plot_battingStatsTable( _df_s )
-    return _fig_to_image( fig, dpi=150 ).getvalue()
+    return _fig_to_image( fig, dpi=300 ).getvalue()
 
 
 @st.cache_data( show_spinner=False )
@@ -803,7 +803,7 @@ def _cached_strategy_figure(
     ]
     fig = _build_figure( counts_list )
     buf = io.BytesIO()
-    fig.savefig( buf, format='png', dpi=150, bbox_inches='tight' )
+    fig.savefig( buf, format='png', dpi=300, bbox_inches='tight' )
     plt.close( fig )
     buf.seek( 0 )
     return buf.getvalue()
@@ -888,7 +888,7 @@ def _cached_stats_table(
     df_st = pd.DataFrame( rows )
     if stats_cols:
         df_st = df_st[ list( stats_cols ) ]
-    return _fig_to_image( plot_battingStatsTable( df_st ), dpi=150 ).getvalue()
+    return _fig_to_image( plot_battingStatsTable( df_st ), dpi=300 ).getvalue()
 
 
 @st.cache_data( show_spinner=False )
@@ -917,7 +917,7 @@ def _cached_pitchtype_stats(
     df_pt = pd.DataFrame( rows )
     if stats_cols:
         df_pt = df_pt[ list( stats_cols ) ]
-    return _fig_to_image( plot_battingStatsTable( df_pt, highlight_last=False ), dpi=150 ).getvalue()
+    return _fig_to_image( plot_battingStatsTable( df_pt, highlight_last=False ), dpi=300 ).getvalue()
 
 
 def _generate_player_pdf(
@@ -1292,7 +1292,7 @@ def _calc_course_chart( df: pd.DataFrame ) -> io.BytesIO | None:
 
     mpl_fig = p.draw()
     buf = io.BytesIO()
-    mpl_fig.savefig( buf, format='png', dpi=150, bbox_inches='tight' )
+    mpl_fig.savefig( buf, format='png', dpi=300, bbox_inches='tight' )
     plt.close( mpl_fig )
     buf.seek( 0 )
     return buf
