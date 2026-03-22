@@ -23,6 +23,14 @@ _SAC_RESULTS   = frozenset( { '犠打', '犠飛' } )
 _RUN_CIRCLES = '①②③④⑤⑥⑦⑧⑨'
 _STATUS_COLS = [ '打者状況', '一走状況', '二走状況', '三走状況' ]
 
+
+def _status_series_run_count( ser: pd.Series ) -> int:
+    """状況列に含まれる「本進」の件数。列が数値型でも .str で落ちないよう文字列化する。"""
+    if ser.empty:
+        return 0
+    return int( ser.fillna( '' ).astype( str ).str.contains( '本進', na = False ).sum() )
+
+
 # PDF セル文字色
 _COLOR_HIT = '#DC2626'   # 赤（ヒット）
 _COLOR_BB  = '#2563EB'   # 青（四死球・エラー）
@@ -306,7 +314,7 @@ def _scorebook_df( df: pd.DataFrame, side: str, innings: list ) -> pd.DataFrame:
 
                 # 本進の個数 = 得点数
                 run_count = sum(
-                    int( ab_plays[ sc ].fillna( '' ).str.contains( '本進', na = False ).sum() )
+                    _status_series_run_count( ab_plays[ sc ] )
                     for sc in _STATUS_COLS
                     if sc in ab_plays.columns
                 )
