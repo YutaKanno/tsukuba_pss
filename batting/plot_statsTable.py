@@ -50,7 +50,7 @@ _DISPLAY_NAMES = {
 }
 
 
-def plot_battingStatsTable( df: pd.DataFrame ) -> plt.Figure:
+def plot_battingStatsTable( df: pd.DataFrame, highlight_last: bool = True ) -> plt.Figure:
 
     cols      = df.columns.tolist()
     col_count = len( cols )
@@ -173,16 +173,18 @@ def plot_battingStatsTable( df: pd.DataFrame ) -> plt.Figure:
     _COLOR_TEAM = '#2C5F8A'   # チーム計行の背景色
 
     _add_patch( 0, 0, last_col, _HEADER_COLOR )
-    for r in range( 1, total_row - 1 ):
+    data_rows = total_row - 1 if highlight_last else total_row
+    for r in range( 1, data_rows ):
         bg = '#EEF2F5' if r % 2 == 0 else 'white'
         _add_patch( r, 0, last_col, bg )
-    # チーム計行（最終行）
-    _add_patch( total_row - 1, 0, last_col, _COLOR_TEAM )
-    for col in range( col_count ):
-        if ( total_row - 1, col ) in table._cells:
-            table._cells[ total_row - 1, col ].set_text_props(
-                color = 'white', fontweight = 'bold'
-            )
+    if highlight_last:
+        # チーム計行（最終行）
+        _add_patch( total_row - 1, 0, last_col, _COLOR_TEAM )
+        for col in range( col_count ):
+            if ( total_row - 1, col ) in table._cells:
+                table._cells[ total_row - 1, col ].set_text_props(
+                    color = 'white', fontweight = 'bold'
+                )
 
     plt.subplots_adjust( left = 0, right = 1, top = 1, bottom = 0 )
     return fig
