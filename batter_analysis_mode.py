@@ -741,36 +741,144 @@ def _show_bunt_section( df_team: pd.DataFrame ):
 
 
 # ── キャッシュ付き描画ヘルパー ────────────────────────────────────
+# キャッシュキーはプリミティブ値のみ（DataFrame ハッシュコスト削減）
+
 @st.cache_data( show_spinner=False )
-def _cached_course_chart( df: pd.DataFrame ) -> bytes | None:
-    buf = _calc_course_chart( df )
+def _get_preprocessed_df( team_id: int ) -> pd.DataFrame:
+    """攻撃チーム列・_date列を付加したDataFrameをteam_idでキャッシュ。"""
+    df = _load_plays_df( team_id )
+    if df.empty:
+        return df
+    df = df.copy()
+    df[ '攻撃チーム' ] = np.where( df[ '表裏' ] == '表', df[ '先攻チーム' ], df[ '後攻チーム' ] )
+    df[ '_date' ] = pd.to_datetime( df[ '試合日時' ], errors='coerce' )
+    return df
+
+
+def _apply_filters( df: pd.DataFrame, start_date, end_date, selected_team ):
+    """(df_team, df_team_all) を返す高速フィルタ（キャッシュなし）。"""
+    df_team_all = df[ df[ '攻撃チーム' ] == selected_team ]
+    df_filtered  = df[
+        ( df[ '_date' ].dt.date >= start_date ) &
+        ( df[ '_date' ].dt.date <= end_date   )
+    ]
+    df_team = df_filtered[ df_filtered[ '攻撃チーム' ] == selected_team ]
+    return df_team, df_team_all
+
+
+@st.cache_data( show_spinner=False )
+def _cached_stats_list_image(
+    team_id: int, start_date, end_date, selected_team: str, side
+) -> bytes | None:
+    """スタッツ一覧タブの統計テーブル画像（side: None/'右'/'左'）。"""
+    from batting.plot_statsTable import plot_battingStatsTable
+    df = _get_preprocessed_df( team_id )
+    if df.empty:
+        return None
+    df_team, _ = _apply_filters( df, start_date, end_date, selected_team )
+    _df_s = _build_stats_df( df_team, side )
+    if _df_s.empty:
+        return None
+    fig = plot_battingStatsTable( _df_s )
+    return _fig_to_image( fig, dpi=150 ).getvalue()
+
+
+@st.cache_data( show_spinner=False )
+def _cached_strategy_figure(
+    team_id: int, start_date, end_date, selected_team: str
+) -> bytes:
+    """チーム作戦分析の円グラフ画像。"""
+    df = _get_preprocessed_df( team_id )
+    df_filtered = df[
+        ( df[ '_date' ].dt.date >= start_date ) &
+        ( df[ '_date' ].dt.date <= end_date   )
+    ]
+    counts_0out_r1 = analyse_R1_strategy( df_filtered, selected_team, out=0 )
+    counts_1out_r1 = analyse_R1_strategy( df_filtered, selected_team, out=1 )
+    counts_r2      = analyse_R2_strategy( df_filtered, selected_team )
+    counts_list = [
+        ( '0アウト1塁',  counts_0out_r1 ),
+        ( '1アウト1塁',  counts_1out_r1 ),
+        ( 'ランナー2塁', counts_r2      ),
+    ]
+    fig = _build_figure( counts_list )
+    buf = io.BytesIO()
+    fig.savefig( buf, format='png', dpi=150, bbox_inches='tight' )
+    plt.close( fig )
+    buf.seek( 0 )
+    return buf.getvalue()
+
+
+@st.cache_data( show_spinner=False )
+def _cached_course_chart(
+    team_id: int, start_date, end_date, selected_team: str,
+    batter_name: str, side
+) -> bytes | None:
+    df = _get_preprocessed_df( team_id )
+    if df.empty:
+        return None
+    df_team, _ = _apply_filters( df, start_date, end_date, selected_team )
+    df_b = df_team[ df_team[ '打者氏名' ] == batter_name ]
+    df_side = df_b if side is None else (
+        df_b[ df_b[ '投手左右' ] == side ] if '投手左右' in df_b.columns else df_b.iloc[ 0:0 ]
+    )
+    buf = _calc_course_chart( df_side )
     return buf.getvalue() if buf else None
 
 
 @st.cache_data( show_spinner=False )
-def _cached_detail_plot( df: pd.DataFrame, pitch_type: str ) -> bytes | None:
+def _cached_detail_plot(
+    team_id: int, start_date, end_date, selected_team: str,
+    batter_name: str, side, pitch_type: str
+) -> bytes | None:
     from pitching.plot_courseDetail import course_detailPlot
-    buf = course_detailPlot( df, pitch_type=pitch_type )
+    df = _get_preprocessed_df( team_id )
+    if df.empty:
+        return None
+    df_team, _ = _apply_filters( df, start_date, end_date, selected_team )
+    df_b = df_team[ df_team[ '打者氏名' ] == batter_name ]
+    df_side = df_b if side is None else (
+        df_b[ df_b[ '投手左右' ] == side ] if '投手左右' in df_b.columns else df_b.iloc[ 0:0 ]
+    )
+    buf = course_detailPlot( df_side, pitch_type=pitch_type )
     return buf.getvalue() if buf else None
 
 
 @st.cache_data( show_spinner=False )
-def _cached_batted_plot( df: pd.DataFrame, pitch_type: str ) -> bytes | None:
+def _cached_batted_plot(
+    team_id: int, start_date, end_date, selected_team: str,
+    batter_name: str, side, pitch_type: str
+) -> bytes | None:
     from pitching.plot_battedBall import batted_ball_plot
-    buf = batted_ball_plot( df, pitch_type=pitch_type )
+    df = _get_preprocessed_df( team_id )
+    if df.empty:
+        return None
+    df_team, _ = _apply_filters( df, start_date, end_date, selected_team )
+    df_b = df_team[ df_team[ '打者氏名' ] == batter_name ]
+    df_side = df_b if side is None else (
+        df_b[ df_b[ '投手左右' ] == side ] if '投手左右' in df_b.columns else df_b.iloc[ 0:0 ]
+    )
+    buf = batted_ball_plot( df_side, pitch_type=pitch_type )
     return buf.getvalue() if buf else None
 
 
 @st.cache_data( show_spinner=False )
-def _cached_stats_table( df: pd.DataFrame, df_all: pd.DataFrame, stats_cols ) -> bytes:
+def _cached_stats_table(
+    team_id: int, start_date, end_date, selected_team: str,
+    batter_name: str, stats_cols
+) -> bytes:
     from batting.calc_stats import calc_batting_stats
     from batting.plot_statsTable import plot_battingStatsTable
+    df = _get_preprocessed_df( team_id )
+    df_team, df_team_all = _apply_filters( df, start_date, end_date, selected_team )
+    df_b     = df_team    [ df_team    [ '打者氏名' ] == batter_name ]
+    df_b_all = df_team_all[ df_team_all[ '打者氏名' ] == batter_name ]
     rows = []
     for df_src, side, lbl in [
-        ( df,     None, '対全投手' ),
-        ( df,     '右',  '対右投手' ),
-        ( df,     '左',  '対左投手' ),
-        ( df_all, None,  '平均'    ),
+        ( df_b,     None, '対全投手' ),
+        ( df_b,     '右',  '対右投手' ),
+        ( df_b,     '左',  '対左投手' ),
+        ( df_b_all, None,  '平均'    ),
     ]:
         df_s = df_src if side is None else (
             df_src[ df_src[ '投手左右' ] == side ]
@@ -780,13 +888,22 @@ def _cached_stats_table( df: pd.DataFrame, df_all: pd.DataFrame, stats_cols ) ->
     df_st = pd.DataFrame( rows )
     if stats_cols:
         df_st = df_st[ list( stats_cols ) ]
-    return _fig_to_image( plot_battingStatsTable( df_st ) ).getvalue()
+    return _fig_to_image( plot_battingStatsTable( df_st ), dpi=150 ).getvalue()
 
 
 @st.cache_data( show_spinner=False )
-def _cached_pitchtype_stats( df: pd.DataFrame, stats_cols ) -> bytes:
+def _cached_pitchtype_stats(
+    team_id: int, start_date, end_date, selected_team: str,
+    batter_name: str, side, stats_cols
+) -> bytes:
     from batting.calc_stats import calc_batting_stats
     from batting.plot_statsTable import plot_battingStatsTable
+    df = _get_preprocessed_df( team_id )
+    df_team, _ = _apply_filters( df, start_date, end_date, selected_team )
+    df_b = df_team[ df_team[ '打者氏名' ] == batter_name ]
+    df_side = df_b if side is None else (
+        df_b[ df_b[ '投手左右' ] == side ] if '投手左右' in df_b.columns else df_b.iloc[ 0:0 ]
+    )
     _GROUPS = [
         ( 'ストレート', [ 'ストレート' ] ),
         ( 'スラ系',    [ 'スライダー', 'カット', 'カーブ' ] ),
@@ -794,13 +911,13 @@ def _cached_pitchtype_stats( df: pd.DataFrame, stats_cols ) -> bytes:
     ]
     rows = []
     for lbl, pt_group in _GROUPS:
-        df_g = df[ df[ '球種' ].isin( pt_group ) ] \
-            if '球種' in df.columns else df.iloc[ 0:0 ]
+        df_g = df_side[ df_side[ '球種' ].isin( pt_group ) ] \
+            if '球種' in df_side.columns else df_side.iloc[ 0:0 ]
         rows.append( calc_batting_stats( df_g, None, lbl ) )
     df_pt = pd.DataFrame( rows )
     if stats_cols:
         df_pt = df_pt[ list( stats_cols ) ]
-    return _fig_to_image( plot_battingStatsTable( df_pt, highlight_last=False ) ).getvalue()
+    return _fig_to_image( plot_battingStatsTable( df_pt, highlight_last=False ), dpi=150 ).getvalue()
 
 
 def _generate_player_pdf(
@@ -1192,21 +1309,18 @@ def show() -> None:
     with col_reload:
         if st.button( 'データを更新', key='bam_reload' ):
             _load_plays_df.clear()
+            _get_preprocessed_df.clear()
             st.rerun()
 
     team_id = st.session_state.get( 'logged_in_team_id' )
-    df = _load_plays_df( team_id )
+    df_pre  = _get_preprocessed_df( team_id )
 
-    if df.empty:
+    if df_pre.empty:
         st.warning( 'データがありません。先に試合データを入力してください。' )
         return
 
-    df = df.copy()
-    df[ '攻撃チーム' ] = np.where( df[ '表裏' ] == '表', df[ '先攻チーム' ], df[ '後攻チーム' ] )
-
-    # ── 期間フィルター ────────────────────────────────────────
-    df[ '_date' ] = pd.to_datetime( df[ '試合日時' ], errors='coerce' )
-    valid_dates   = df[ '_date' ].dropna()
+    # ── 期間・チーム選択（軽量な前処理済みDFから）────────────────
+    valid_dates = df_pre[ '_date' ].dropna()
     date_min = valid_dates.min().date() if not valid_dates.empty else datetime.date.today()
     date_max = valid_dates.max().date() if not valid_dates.empty else datetime.date.today()
 
@@ -1216,15 +1330,8 @@ def show() -> None:
     with col_end:
         end_date = st.date_input( '終了日', value=date_max, key='bam_end' )
 
-    df_all = df.copy()   # 全期間データ（日付フィルター前）
-
-    df = df[
-        ( df[ '_date' ].dt.date >= start_date ) &
-        ( df[ '_date' ].dt.date <= end_date   )
-    ]
-
-    # ── チーム選択 ───────────────────────────────────────────
-    teams = sorted( df[ '攻撃チーム' ].dropna().unique().tolist() )
+    # チームリストは全期間から
+    teams = sorted( df_pre[ '攻撃チーム' ].dropna().unique().tolist() )
     if not teams:
         st.warning( '打者データが見つかりません。' )
         return
@@ -1235,94 +1342,76 @@ def show() -> None:
     with col_team:
         selected_team = st.selectbox( '攻撃チーム', teams, index=team_idx, key='bam_team' )
 
-    df_team     = df[     df[     '攻撃チーム' ] == selected_team ]
-    df_team_all = df_all[ df_all[ '攻撃チーム' ] == selected_team ]
-
-    # ── タブ ────────────────────────────────────────────────
-    tab_stats, tab_strategy, tab_player, tab_export = st.tabs(
-        [ 'スタッツ一覧', 'チーム作戦分析', 'プレイヤー分析', '出力' ]
+    # ── セクション切り替え（radio: 選択中のみ重い処理を実行）────────
+    section = st.radio(
+        'セクション',
+        [ 'スタッツ一覧', 'チーム作戦分析', 'プレイヤー分析', '出力' ],
+        horizontal=True, key='bam_section',
     )
+    st.divider()
 
     # ── スタッツ一覧 ─────────────────────────────────────────
-    with tab_stats:
-        if df_team.empty:
-            st.info( 'データがありません。' )
-        else:
-            t_all, t_right, t_left, t_export = st.tabs(
-                [ '全体', '対右投手', '対左投手', '出力' ]
-            )
-            for _tab, _side, _label in [
-                ( t_all,   None, '全体'    ),
-                ( t_right, '右', '対右投手' ),
-                ( t_left,  '左', '対左投手' ),
-            ]:
-                with _tab:
-                    _df_s = _build_stats_df( df_team, _side )
-                    if _df_s.empty:
-                        st.info( f'{ _label } のデータがありません。' )
-                    else:
-                        from batting.plot_statsTable import plot_battingStatsTable
-                        _fig = plot_battingStatsTable( _df_s )
-                        st.image( _fig_to_image( _fig ), use_container_width=True )
-
-            with t_export:
-                st.markdown( '**PDF**' )
-                if st.button( 'PDF 生成', key='bam_gen_pdf' ):
-                    with st.spinner( 'PDF 生成中...' ):
-                        _pdf = _generate_stats_pdf(
-                            df_team, selected_team, start_date, end_date,
-                        )
-                    st.download_button(
-                        label     = 'PDF ダウンロード',
-                        data      = _pdf.getvalue(),
-                        file_name = f'batting_stats_{ selected_team }_{ start_date }_{ end_date }.pdf',
-                        mime      = 'application/pdf',
-                        key       = 'bam_dl_pdf',
-                    )
-
-    with tab_strategy:
-        t_view, t_export = st.tabs( [ '分析', '出力' ] )
-
-        with t_view:
-            # 攻撃分析（ランナー別作戦割合）
-            st.markdown( '## 攻撃分析' )
-            counts_0out_r1 = analyse_R1_strategy( df, selected_team, out=0 )
-            counts_1out_r1 = analyse_R1_strategy( df, selected_team, out=1 )
-            counts_r2      = analyse_R2_strategy( df, selected_team )
-
-            counts_list = [
-                ( '0アウト1塁',   counts_0out_r1 ),
-                ( '1アウト1塁',   counts_1out_r1 ),
-                ( 'ランナー2塁',  counts_r2      ),
-            ]
-
-            fig = _build_figure( counts_list )
-            st.pyplot( fig, use_container_width=True )
-            plt.close( fig )
-
-            # 作戦分析（盗塁・バント）
-            _show_steal_section( df_team )
-            _show_bunt_section( df_team )
-
-        with t_export:
-            st.markdown( '**PDF**' )
-            if st.button( 'PDF 生成', key='bam_strategy_gen_pdf' ):
-                with st.spinner( 'PDF 生成中...' ):
-                    _pdf = _generate_strategy_pdf(
-                        df, df_team, selected_team, start_date, end_date,
-                    )
-                st.download_button(
-                    label     = 'PDF ダウンロード',
-                    data      = _pdf.getvalue(),
-                    file_name = f'strategy_{ selected_team }_{ start_date }_{ end_date }.pdf',
-                    mime      = 'application/pdf',
-                    key       = 'bam_strategy_dl_pdf',
-                )
-
-    with tab_player:
-        batters_all = sorted(
-            df_team[ '打者氏名' ].dropna().unique().tolist()
+    if section == 'スタッツ一覧':
+        stat_view = st.radio(
+            '投手区分', [ '全体', '対右投手', '対左投手' ],
+            horizontal=True, key='bam_stats_side',
         )
+        _side_map = { '全体': None, '対右投手': '右', '対左投手': '左' }
+        _side = _side_map[ stat_view ]
+        raw = _cached_stats_list_image( team_id, start_date, end_date, selected_team, _side )
+        if raw:
+            st.image( raw, use_container_width=True )
+        else:
+            st.info( 'データがありません。' )
+        st.markdown( '---' )
+        st.markdown( '**PDF**' )
+        if st.button( 'PDF 生成', key='bam_gen_pdf' ):
+            df_team, _ = _apply_filters( df_pre, start_date, end_date, selected_team )
+            with st.spinner( 'PDF 生成中...' ):
+                _pdf = _generate_stats_pdf( df_team, selected_team, start_date, end_date )
+            st.download_button(
+                label     = 'PDF ダウンロード',
+                data      = _pdf.getvalue(),
+                file_name = f'batting_stats_{ selected_team }_{ start_date }_{ end_date }.pdf',
+                mime      = 'application/pdf',
+                key       = 'bam_dl_pdf',
+            )
+
+    # ── チーム作戦分析 ────────────────────────────────────────
+    elif section == 'チーム作戦分析':
+        st.markdown( '## 攻撃分析' )
+        raw_fig = _cached_strategy_figure( team_id, start_date, end_date, selected_team )
+        st.image( raw_fig, use_container_width=True )
+
+        # 盗塁・バント分析（軽量なため都度計算）
+        df_team, _ = _apply_filters( df_pre, start_date, end_date, selected_team )
+        _show_steal_section( df_team )
+        _show_bunt_section( df_team )
+
+        st.markdown( '---' )
+        st.markdown( '**PDF**' )
+        if st.button( 'PDF 生成', key='bam_strategy_gen_pdf' ):
+            df_team, _ = _apply_filters( df_pre, start_date, end_date, selected_team )
+            df_filtered = df_pre[
+                ( df_pre[ '_date' ].dt.date >= start_date ) &
+                ( df_pre[ '_date' ].dt.date <= end_date   )
+            ]
+            with st.spinner( 'PDF 生成中...' ):
+                _pdf = _generate_strategy_pdf(
+                    df_filtered, df_team, selected_team, start_date, end_date,
+                )
+            st.download_button(
+                label     = 'PDF ダウンロード',
+                data      = _pdf.getvalue(),
+                file_name = f'strategy_{ selected_team }_{ start_date }_{ end_date }.pdf',
+                mime      = 'application/pdf',
+                key       = 'bam_strategy_dl_pdf',
+            )
+
+    # ── プレイヤー分析 ────────────────────────────────────────
+    elif section == 'プレイヤー分析':
+        df_team, df_team_all = _apply_filters( df_pre, start_date, end_date, selected_team )
+        batters_all = sorted( df_team[ '打者氏名' ].dropna().unique().tolist() )
         if not batters_all:
             st.info( 'データがありません。' )
         else:
@@ -1334,31 +1423,34 @@ def show() -> None:
                 st.info( '打者を選択してください。' )
             else:
                 from batting.calc_stats import calc_batting_stats as _cbs_ref
-                # _build_stats_df を使わず軽量にカラム取得
                 _STATS_COLS = tuple( _cbs_ref( df_team.iloc[ 0:0 ], None, '' ).keys() )
 
-                def _render_scatter_by_side( df_side ):
+                def _render_scatter_by_side( batter: str, side_str ):
                     """詳細散布 + 打球位置をキャッシュ経由で球種別5列表示"""
-                    if '球種' not in df_side.columns:
+                    # 球種リストはキャッシュ済み df から取得
+                    df_b = df_team[ df_team[ '打者氏名' ] == batter ]
+                    df_s = df_b if side_str is None else (
+                        df_b[ df_b[ '投手左右' ] == side_str ]
+                        if '投手左右' in df_b.columns else df_b.iloc[ 0:0 ]
+                    )
+                    if '球種' not in df_s.columns:
                         return
-                    pt_list = df_side[ '球種' ].dropna().value_counts().index.tolist()[ :5 ]
+                    pt_list = df_s[ '球種' ].dropna().value_counts().index.tolist()[ :5 ]
                     if not pt_list:
                         st.info( 'データ不足' )
                         return
                     cols_sc = st.columns( 5 )
                     for j, pt in enumerate( pt_list ):
-                        raw_d = _cached_detail_plot( df_side, pt )
-                        raw_b = _cached_batted_plot( df_side, pt )
+                        raw_d = _cached_detail_plot(
+                            team_id, start_date, end_date, selected_team, batter, side_str, pt )
+                        raw_b = _cached_batted_plot(
+                            team_id, start_date, end_date, selected_team, batter, side_str, pt )
                         with cols_sc[ j ]:
                             st.caption( pt )
                             if raw_d:
                                 st.image( raw_d, use_container_width=True )
                             if raw_b:
                                 st.image( raw_b, use_container_width=True )
-
-                def _render_pitchtype_stats( df_side ):
-                    st.image( _cached_pitchtype_stats( df_side, _STATS_COLS ),
-                              use_container_width=True )
 
                 # 打者タブ + PDF出力タブ
                 all_tab_labels = selected_batters + [ 'PDF出力' ]
@@ -1371,8 +1463,6 @@ def show() -> None:
 
                 for tab_b, batter in zip( batter_tabs, selected_batters ):
                     with tab_b:
-                        df_b = df_team[ df_team[ '打者氏名' ] == batter ]
-
                         # ── コメント ────────────────────────────────
                         _ck_edit = f'ba_comment_editing_{batter}'
                         if _ck_edit not in st.session_state:
@@ -1403,12 +1493,15 @@ def show() -> None:
                                 st.session_state[ _ck_edit ] = True
                                 st.rerun()
 
-                        # ── スタッツテーブル（キャッシュ）────────────
-                        df_b_all = df_team_all[ df_team_all[ '打者氏名' ] == batter ]
-                        st.image( _cached_stats_table( df_b, df_b_all, _STATS_COLS ),
-                                  use_container_width=True )
+                        # ── スタッツテーブル（キャッシュ・プリミティブキー）──
+                        st.image(
+                            _cached_stats_table(
+                                team_id, start_date, end_date, selected_team, batter, _STATS_COLS
+                            ),
+                            use_container_width=True,
+                        )
 
-                        # ── コース別打率（全/右/左）横3列（キャッシュ）────
+                        # ── コース別打率（全/右/左）横3列 ──────────────
                         col_all, col_r, col_l = st.columns( 3 )
                         for col, label, side in [
                             ( col_all, '全投手',   None ),
@@ -1417,11 +1510,8 @@ def show() -> None:
                         ]:
                             with col:
                                 st.caption( label )
-                                df_side = df_b if side is None else (
-                                    df_b[ df_b[ '投手左右' ] == side ]
-                                    if '投手左右' in df_b.columns else df_b.iloc[ 0:0 ]
-                                )
-                                raw_c = _cached_course_chart( df_side )
+                                raw_c = _cached_course_chart(
+                                    team_id, start_date, end_date, selected_team, batter, side )
                                 if raw_c:
                                     st.image( raw_c, use_container_width=True )
                                 else:
@@ -1429,17 +1519,23 @@ def show() -> None:
 
                         # ── 対右投手 球種タイプ別スタッツ + 散布図 ──────────
                         st.markdown( '#### 対右投手' )
-                        df_right = df_b[ df_b[ '投手左右' ] == '右' ] \
-                            if '投手左右' in df_b.columns else df_b.iloc[ 0:0 ]
-                        _render_pitchtype_stats( df_right )
-                        _render_scatter_by_side( df_right )
+                        st.image(
+                            _cached_pitchtype_stats(
+                                team_id, start_date, end_date, selected_team, batter, '右', _STATS_COLS
+                            ),
+                            use_container_width=True,
+                        )
+                        _render_scatter_by_side( batter, '右' )
 
                         # ── 対左投手 球種タイプ別スタッツ + 散布図 ──────────
                         st.markdown( '#### 対左投手' )
-                        df_left = df_b[ df_b[ '投手左右' ] == '左' ] \
-                            if '投手左右' in df_b.columns else df_b.iloc[ 0:0 ]
-                        _render_pitchtype_stats( df_left )
-                        _render_scatter_by_side( df_left )
+                        st.image(
+                            _cached_pitchtype_stats(
+                                team_id, start_date, end_date, selected_team, batter, '左', _STATS_COLS
+                            ),
+                            use_container_width=True,
+                        )
+                        _render_scatter_by_side( batter, '左' )
 
                 with tab_pdf:
                     st.markdown( '**PDF（選択選手全員）**' )
@@ -1460,8 +1556,13 @@ def show() -> None:
                             key       = 'bam_player_dl_pdf',
                         )
 
-    # ── 出力タブ ─────────────────────────────────────────────
-    with tab_export:
+    # ── 出力 ─────────────────────────────────────────────────
+    else:
+        df_team, df_team_all = _apply_filters( df_pre, start_date, end_date, selected_team )
+        df_filtered = df_pre[
+            ( df_pre[ '_date' ].dt.date >= start_date ) &
+            ( df_pre[ '_date' ].dt.date <= end_date   )
+        ]
         st.markdown( '### 統合出力（スタッツ一覧 + チーム作戦分析 + プレイヤー分析）' )
 
         batters_for_export = sorted(
@@ -1486,7 +1587,7 @@ def show() -> None:
             if st.button( 'PDF 生成', key='bam_export_gen_pdf' ):
                 with st.spinner( 'PDF 生成中...' ):
                     _pdf = generate_combined_pdf(
-                        df, df_team, df_team_all,
+                        df_filtered, df_team, df_team_all,
                         selected_team, start_date, end_date,
                         selected_export_batters, _EXPORT_STATS_COLS, team_id,
                     )
@@ -1504,7 +1605,7 @@ def show() -> None:
                 with st.spinner( 'PPTX 生成中...' ):
                     try:
                         _pptx = generate_combined_pptx(
-                            df, df_team, df_team_all,
+                            df_filtered, df_team, df_team_all,
                             selected_team, start_date, end_date,
                             selected_export_batters, _EXPORT_STATS_COLS, team_id,
                         )
