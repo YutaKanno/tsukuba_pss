@@ -11,6 +11,12 @@ import field
 import plate
 from config import COLUMN_NAMES, IDX
 
+def _check_missing_positions(poses):
+    """ポジション2-9が全て埋まっているか確認し、不足ポジション番号のセット(str)を返す。"""
+    present = {str(p) for p in poses[:9] if str(p) not in ('0', '', 'None', 'nan')}
+    return {str(p) for p in range(2, 10)} - present
+
+
 def update_list( list, top_poses, top_names, top_nums, top_lrs, bottom_poses, bottom_names, bottom_nums, bottom_lrs, top_score, bottom_score ):
 
     試合日時 = list[0]
@@ -419,7 +425,7 @@ def main_page(list):
         st.session_state["already_rerun"] = True
         st.rerun()
 
-    tab2, tab1, tab3 = st.tabs(['メニュー', 'データ入力', 'データ一覧'])
+    tab2, tab1, tab_sb, tab3 = st.tabs(['メニュー', 'データ入力', 'スコアブック', 'データ一覧'])
     with tab3:
         _display_rows = 150
         df_display = dataframe.tail(_display_rows).astype(str) if len(dataframe) > _display_rows else dataframe.astype(str)
@@ -428,16 +434,47 @@ def main_page(list):
 
         
     with tab1:
+        # メモリと DB の差分を先に補完（イニング外の欠損もここで回復）
+        _gid_bg = st.session_state.get('current_game_id')
+        _mem_bg = st.session_state.get('all_list') or []
+        if _gid_bg and _mem_bg:
+            try:
+                from db import game_repo as _gr_bg
+                _n_bg = _gr_bg.sync_missing_plays(
+                    _gid_bg,
+                    _mem_bg,
+                    st.session_state.get('logged_in_team_id'),
+                )
+                if _n_bg:
+                    st.session_state['_inning_sync_result'] = _n_bg
+            except Exception as _e_bg:
+                st.session_state['_inning_sync_error'] = str(_e_bg)
         # DB保存エラー・イニング同期結果をrerun後も表示（session_stateから読む）
         if '_db_insert_error' in st.session_state:
             _err_msg = st.session_state.pop('_db_insert_error')
-            st.error(f"⚠️ プレイデータのDB保存に失敗しました（もう一度確定ボタンを押すか、運営に連絡してください）\n\n詳細: {_err_msg}")
+            st.error(f"⚠️ DB保存に一時的に失敗しました。データはローカルに保持されており、イニング終了時に自動再送されます。通信状況を確認してください。\n\n詳細: {_err_msg}")
         if '_inning_sync_result' in st.session_state:
             _n = st.session_state.pop('_inning_sync_result')
-            st.warning(f"⚠️ イニング終了時に {_n} 件の未登録データをDBに補完しました")
+            st.warning(f"⚠️ {_n} 件の未登録データをDBに補完しました")
         if '_inning_sync_error' in st.session_state:
             _sync_err_msg = st.session_state.pop('_inning_sync_error')
-            st.error(f"⚠️ イニング終了時のDB同期に失敗しました: {_sync_err_msg}")
+            st.error(f"⚠️ DB同期に失敗しました: {_sync_err_msg}")
+        # 選手交代後のポジションチェック
+        if st.session_state.pop('_just_did_substitution', False):
+            _top_missing = _check_missing_positions(top_poses)
+            _bot_missing = _check_missing_positions(bottom_poses)
+            _pos_parts = []
+            if _top_missing:
+                _pos_parts.append(f"先攻（不足: {'、'.join(sorted(_top_missing))}）")
+            if _bot_missing:
+                _pos_parts.append(f"後攻（不足: {'、'.join(sorted(_bot_missing))}）")
+            if _pos_parts:
+                st.session_state['_pos_warning'] = (
+                    "ポジションが不適です。守備位置を確認してください。　" + "　".join(_pos_parts)
+                )
+        if '_pos_warning' in st.session_state:
+            _pos_warn_msg = st.session_state.pop('_pos_warning')
+            st.warning(_pos_warn_msg)
         container = st.container()
         with container:
             col1, col2 = st.columns(2)
@@ -1331,7 +1368,6 @@ def main_page(list):
                                 play_key = (gid, プレイの番号, 回, 表裏)
                                 if st.session_state.get('last_confirmed_play_key') == play_key:
                                     st.rerun()
-                                st.session_state['last_confirmed_play_key'] = play_key
 
                                 inputed_list = [
                                     試合日時, Season, Kind, Week, Day, GameNumber,
@@ -1348,9 +1384,7 @@ def main_page(list):
                                     top_poses, top_names, top_nums, top_lrs, bottom_poses, bottom_names, bottom_nums, bottom_lrs,
                                     top_score, bottom_score
                                     ]
-                                
-                                
-                                st.session_state[ 'all_list' ].append(inputed_list)
+
                                 if gid is not None:
                                     try:
                                         from db import game_repo
@@ -1360,8 +1394,13 @@ def main_page(list):
                                             owner_team_id=_st.session_state.get("logged_in_team_id"),
                                         )
                                     except Exception as e:
-                                        # rerun後も表示されるようにsession_stateに保存
+                                        # DB保存失敗 → st.stop() は呼ばない。
+                                        # all_list への追加・data_list の更新は続行し、
+                                        # イニング終了時 / タブ表示時の sync_missing_plays に自動再送を任せる。
                                         st.session_state['_db_insert_error'] = str(e)
+
+                                st.session_state['last_confirmed_play_key'] = play_key
+                                st.session_state['all_list'].append(inputed_list)
                                 if 'cached_all_list_len' in st.session_state:
                                     st.session_state['cached_all_list_len'] = -1
                                 
@@ -1432,15 +1471,28 @@ def main_page(list):
                                     try:
                                         from db import game_repo as _igr
                                         _mem_list = st.session_state.get('all_list', [])
-                                        _db_plays = _igr.get_play_list(gid)
-                                        _db_nums = {row[9] for row in _db_plays if row[9] is not None}
-                                        _missing = [row for row in _mem_list if row[9] not in _db_nums]
-                                        for _row in _missing:
-                                            _igr.insert_play(gid, _row)
-                                        if _missing:
-                                            st.session_state['_inning_sync_result'] = len(_missing)
+                                        _n_sync = _igr.sync_missing_plays(
+                                            gid,
+                                            _mem_list,
+                                            st.session_state.get('logged_in_team_id'),
+                                        )
+                                        if _n_sync:
+                                            st.session_state['_inning_sync_result'] = _n_sync
                                     except Exception as _sync_err:
                                         st.session_state['_inning_sync_error'] = str(_sync_err)
+
+                                # ── イニング終了時ポジションチェック ──
+                                if _inning_ended:
+                                    _next_omote_ura = updated_list[11]
+                                    _def_poses = top_poses if _next_omote_ura == '裏' else bottom_poses
+                                    _def_label = '先攻' if _next_omote_ura == '裏' else '後攻'
+                                    _missing_pos = _check_missing_positions(_def_poses)
+                                    if _missing_pos:
+                                        _missing_str = '、'.join(sorted(_missing_pos))
+                                        st.session_state['_pos_warning'] = (
+                                            f"⚠️ {_def_label}チームのポジションが不適です。"
+                                            f"守備位置を確認してください。（不足ポジション: {_missing_str}）"
+                                        )
 
                                 st.session_state[ 'data_list' ] = updated_list
                                 
@@ -1458,7 +1510,82 @@ def main_page(list):
                                 plate.clear_canvas()
                                 field.clear_canvas()
                                 st.rerun() # 画面を再表示
-        
+
+    with tab_sb:
+        from score_card import (
+            _display_innings, _score_df, _scorebook_df,
+            _pitcher_df, generate_score_card_pdf,
+        )
+        if dataframe.empty:
+            st.info('まだデータが入力されていません。')
+        else:
+            # COLUMN_NAMES は "表.裏"、score_card は "表裏" を期待するためリネーム
+            _sb_df = dataframe.rename(columns={'表.裏': '表裏'})
+
+            _sb_innings  = _display_innings(_sb_df)
+            _sb_top_team = 先攻チーム
+            _sb_bot_team = 後攻チーム
+            _sb_date     = str(試合日時)
+            _sb_kind     = str(Kind) if Kind else ''
+
+            # ── スコア ────────────────────────────────────────
+            st.subheader('スコア')
+            st.dataframe(
+                _score_df(_sb_df, _sb_top_team, _sb_bot_team, _sb_innings),
+                use_container_width=True,
+            )
+
+            # ── スコアブック ──────────────────────────────────
+            _sb_col_top, _sb_col_bot = st.columns(2)
+            with _sb_col_top:
+                st.subheader(f'先攻：{_sb_top_team}')
+                _sb_top = _scorebook_df(_sb_df, '表', _sb_innings)
+                if _sb_top.empty:
+                    st.info('先攻の打席データがありません。')
+                else:
+                    st.dataframe(_sb_top, use_container_width=True)
+            with _sb_col_bot:
+                st.subheader(f'後攻：{_sb_bot_team}')
+                _sb_bot = _scorebook_df(_sb_df, '裏', _sb_innings)
+                if _sb_bot.empty:
+                    st.info('後攻の打席データがありません。')
+                else:
+                    st.dataframe(_sb_bot, use_container_width=True)
+
+            # ── 投手スコア ────────────────────────────────────
+            st.subheader('投手スコア')
+            _sb_pcol1, _sb_pcol2 = st.columns(2)
+            with _sb_pcol1:
+                st.markdown(f'**{_sb_top_team} 投手**')
+                _sb_p_top = _pitcher_df(_sb_df, '裏')
+                if _sb_p_top.empty:
+                    st.info('データがありません。')
+                else:
+                    st.dataframe(_sb_p_top, use_container_width=True)
+            with _sb_pcol2:
+                st.markdown(f'**{_sb_bot_team} 投手**')
+                _sb_p_bot = _pitcher_df(_sb_df, '表')
+                if _sb_p_bot.empty:
+                    st.info('データがありません。')
+                else:
+                    st.dataframe(_sb_p_bot, use_container_width=True)
+
+            # ── PDF 出力 ──────────────────────────────────────
+            st.divider()
+            if st.button('PDF 生成', key='mp_sc_gen_pdf'):
+                with st.spinner('PDF 生成中...'):
+                    _sb_pdf_buf = generate_score_card_pdf(
+                        _sb_df, _sb_top_team, _sb_bot_team,
+                        _sb_date, _sb_kind, _sb_innings,
+                    )
+                st.download_button(
+                    label='PDF ダウンロード',
+                    data=_sb_pdf_buf.getvalue(),
+                    file_name=f'score_{_sb_top_team}_vs_{_sb_bot_team}_{_sb_date}.pdf',
+                    mime='application/pdf',
+                    key='mp_sc_dl_pdf',
+                )
+
     with tab2:
         # ── ⏱ 試合開始時刻（最重要） ──
         st.markdown( "### ⏱ 試合開始時刻" )
@@ -1714,7 +1841,7 @@ def main_page(list):
             'reset_flag', 'radio_selection', 'pickoff_selection',
             '_game_end_sync_done', '_game_end_sync_result',
             '_inning_sync_result', '_inning_sync_error',
-            '_db_insert_error',
+            '_db_insert_error', '_pos_warning', '_just_did_substitution',
         ]
 
         if not st.session_state.get( '_game_end_sync_done' ):
@@ -1726,14 +1853,13 @@ def main_page(list):
                 if gid and mem_list:
                     try:
                         from db import game_repo as _gr
-                        db_plays    = _gr.get_play_list( gid )
-                        db_play_nums = { row[ 9 ] for row in db_plays if row[ 9 ] is not None }
-                        missing_rows = [ row for row in mem_list if row[ 9 ] not in db_play_nums ]
-                        for row in missing_rows:
-                            _gr.insert_play( gid, row )
-                        sync_result[ 'missing' ] = len( missing_rows )
+                        sync_result['missing'] = _gr.sync_missing_plays(
+                            gid,
+                            mem_list,
+                            st.session_state.get('logged_in_team_id'),
+                        )
                     except Exception as _e:
-                        sync_result[ 'error' ] = str( _e )
+                        sync_result['error'] = str(_e)
                 st.session_state[ '_game_end_sync_result' ] = sync_result
                 st.session_state[ '_game_end_sync_done'   ] = True
                 st.rerun()

@@ -4,6 +4,7 @@ DB operations for game and per-play data.
 import json
 import os
 import sqlite3
+import time
 from datetime import datetime
 from typing import Any, List, Optional, Tuple
 
@@ -243,22 +244,68 @@ def get_play_list(game_id: int, owner_team_id: Optional[int] = None) -> List[lis
 
 
 def insert_play(game_id: int, row_list: list, owner_team_id: Optional[int] = None) -> None:
-    """Insert one play. Raises PermissionError if owner_team_id is given and does not match."""
+    """Insert one play. Raises PermissionError if owner_team_id is given and does not match.
+
+    PostgreSQL では接続切れ等に対し OperationalError / InterfaceError を短いバックオフで再試行する。
+    """
     d = _row_to_db(game_id, row_list)
-    conn = schema.get_conn()
-    try:
-        c = conn.cursor()
-        if owner_team_id is not None:
-            _assert_owner(c, game_id, owner_team_id)
-        cols = ', '.join(d.keys())
-        placeholders = ', '.join('?' * len(d))
-        c.execute(f'INSERT INTO play_data ({cols}) VALUES ({placeholders})', list(d.values()))
-        conn.commit()
-    except Exception:
-        raise
-    finally:
-        conn.close()
-    _update_game_json_plays(game_id, row_list)
+    max_attempts = 3 if schema.is_postgres() else 1
+    for attempt in range(max_attempts):
+        conn = schema.get_conn()
+        try:
+            c = conn.cursor()
+            if owner_team_id is not None:
+                _assert_owner(c, game_id, owner_team_id)
+            cols = ', '.join(d.keys())
+            placeholders = ', '.join('?' * len(d))
+            c.execute(f'INSERT INTO play_data ({cols}) VALUES ({placeholders})', list(d.values()))
+            conn.commit()
+            schema.release_connection(conn, discard=False)
+            _update_game_json_plays(game_id, row_list)
+            return
+        except Exception as e:
+            discard = False
+            if schema.is_postgres():
+                import psycopg2
+                if isinstance(e, (psycopg2.OperationalError, psycopg2.InterfaceError)):
+                    discard = True
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            schema.release_connection(conn, discard=discard)
+            if discard and attempt < max_attempts - 1:
+                # 接続プールをリセットして次のリトライで完全に新しい接続を使う
+                schema.reset_pg_pool()
+                time.sleep(0.3 * (2**attempt))
+                continue
+            raise
+
+
+def sync_missing_plays(
+    game_id: int, mem_rows: list, owner_team_id: Optional[int] = None
+) -> int:
+    """mem_rows にあって DB に無いプレイ（プレイの番号）を INSERT する。補完した件数を返す。
+
+    1 件の INSERT 失敗は記録して続行し、最後にまとめて例外を送出する。
+    これにより途中で止まらず全欠損プレイの再送を試みる。
+    """
+    if not mem_rows:
+        return 0
+    db_plays = get_play_list(game_id, owner_team_id=owner_team_id)
+    db_nums = {row[9] for row in db_plays if row[9] is not None}
+    missing = [row for row in mem_rows if row[9] not in db_nums]
+    errors = []
+    inserted = 0
+    for row in missing:
+        try:
+            insert_play(game_id, row, owner_team_id=owner_team_id)
+            inserted += 1
+        except Exception as e:
+            errors.append(e)
+    if errors:
+        raise errors[-1]  # 最後のエラーを呼び出し元に伝える
+    return inserted
 
 
 def get_game_teams(game_id: int, owner_team_id: Optional[int] = None) -> Tuple[Optional[str], Optional[str]]:

@@ -362,6 +362,7 @@ def member_page( member_df, top_poses, top_names, top_nums, top_lrs, bottom_pose
                     st.session_state["current_game_id"] = None
             st.session_state.game_start = "continue"
             st.success("入力完了しました")
+            st.session_state['_just_did_substitution'] = True
             st.session_state.page_ctg = "main"
             st.rerun()
 

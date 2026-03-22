@@ -128,20 +128,28 @@ class _PgConnWrapper:
         except Exception:
             pass
 
-    def close(self) -> None:
+    def close(self, discard: bool = False) -> None:
         if self._pool is not None:
-            # プールに戻す前にロールバックして接続を清潔な状態にする
             try:
                 self._conn.rollback()
             except Exception:
                 pass
-            try:
-                self._pool.putconn(self._conn)
-            except Exception:
+            if discard:
                 try:
-                    self._conn.close()
+                    self._pool.putconn(self._conn, close=True)
                 except Exception:
-                    pass
+                    try:
+                        self._conn.close()
+                    except Exception:
+                        pass
+            else:
+                try:
+                    self._pool.putconn(self._conn)
+                except Exception:
+                    try:
+                        self._conn.close()
+                    except Exception:
+                        pass
         else:
             self._conn.close()
 
@@ -195,6 +203,23 @@ def get_conn() -> Union[sqlite3.Connection, _PgConnWrapper]:
             pool = _get_pg_pool()
             return _get_valid_conn(pool)
     return sqlite3.connect(DB_FILE)
+
+
+def release_connection(conn: Union[sqlite3.Connection, _PgConnWrapper], *, discard: bool = False) -> None:
+    """SQLite / PG ラッパー共通で接続を返却・閉じる。PG で切断済み等のときは discard=True でプールに戻さない。"""
+    if isinstance(conn, _PgConnWrapper):
+        conn.close(discard=discard)
+    else:
+        conn.close()
+
+
+def reset_pg_pool() -> None:
+    """PostgreSQL接続プールのキャッシュをクリアして次回 get_conn() で再作成させる。
+    接続が全滅した場合のリカバリ用。SQLite環境では何もしない。"""
+    try:
+        _get_pg_pool.clear()
+    except Exception:
+        pass
 
 
 def migrate_add_user_account() -> None:
