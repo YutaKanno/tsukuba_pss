@@ -72,6 +72,134 @@ def _fig_to_image( fig: plt.Figure, dpi: int, tight: bool = True ) -> io.BytesIO
     return buf
 
 
+# ── キャッシュ付き描画ヘルパー（プリミティブキー）─────────────────
+
+@st.cache_data
+def _get_pitcher_df( team_id: int ) -> pd.DataFrame:
+    """_load_plays_df に _date 列を追加してキャッシュ。"""
+    df = _load_plays_df( team_id )
+    if df.empty:
+        return df
+    df = df.copy()
+    df[ '_date' ] = pd.to_datetime( df[ '試合日時' ], errors = 'coerce' )
+    return df
+
+
+def _filter_pitcher_df( df_pre, start_date, end_date, selected_team, pitcher_name ):
+    """(df_p, df_all_filtered) を返す高速フィルタ（キャッシュなし）。"""
+    df_filtered = df_pre[
+        ( df_pre[ '_date' ].dt.date >= start_date ) &
+        ( df_pre[ '_date' ].dt.date <= end_date   )
+    ]
+    df_team = df_filtered[ df_filtered[ '守備チーム' ] == selected_team ]
+    df_p = df_team[
+        ( df_team[ '投手氏名' ] == pitcher_name ) &
+        ( df_team[ '打撃結果' ] != '0' )
+    ].copy()
+    df_all_filtered = df_filtered[ df_filtered[ '打撃結果' ] != '0' ]
+    return df_p, df_all_filtered
+
+
+@st.cache_data( show_spinner=False )
+def _cached_overall_stats( team_id, start_date, end_date, selected_team, pitcher_name ):
+    df_pre = _get_pitcher_df( team_id )
+    df_p, df_all = _filter_pitcher_df( df_pre, start_date, end_date, selected_team, pitcher_name )
+    if df_p.empty:
+        return None
+    pitcher_label = f'{ pitcher_name } 全体'
+    overall_df = pd.DataFrame( [
+        calc_overallStats( df_p,  None, pitcher_label ),
+        calc_overallStats( df_p,  '右', 'vs右打者' ),
+        calc_overallStats( df_p,  '左', 'vs左打者' ),
+        calc_overallStats( df_all, None, '平均値'   ),
+    ] )
+    _blank_for_avg  = [ '投球数', '打席数', '安打数', '本塁打数', '奪三振数', '四死球数' ]
+    _game_only_cols = [ '登板数', '投球回', '失点数', '失点率' ]
+    overall_df.loc[ overall_df[ 'index' ] == '平均値',     _blank_for_avg  ] = '--'
+    overall_df.loc[ overall_df[ 'index' ] != pitcher_label, _game_only_cols ] = '--'
+    fig = plot_overallStatsTable( overall_df )
+    return _fig_to_image( fig, dpi=_TABLE_DPI ).getvalue()
+
+
+@st.cache_data( show_spinner=False )
+def _cached_velocity_dist( team_id, start_date, end_date, selected_team, pitcher_name ):
+    df_pre = _get_pitcher_df( team_id )
+    df_p, _ = _filter_pitcher_df( df_pre, start_date, end_date, selected_team, pitcher_name )
+    if df_p.empty:
+        return None
+    buf = velocity_dist_plot( df_p, PITCH_TYPE_COLORS )
+    return buf.getvalue() if buf else None
+
+
+@st.cache_data( show_spinner=False )
+def _cached_batted_type( team_id, start_date, end_date, selected_team, pitcher_name ):
+    df_pre = _get_pitcher_df( team_id )
+    df_p, df_all = _filter_pitcher_df( df_pre, start_date, end_date, selected_team, pitcher_name )
+    if df_p.empty:
+        return None
+    buf = batted_type_plot( df_p, df_all=df_all, pitcher_name=pitcher_name )
+    return buf.getvalue() if buf else None
+
+
+@st.cache_data( show_spinner=False )
+def _cached_appearance_history( team_id, start_date, end_date, selected_team, pitcher_name ):
+    df_pre = _get_pitcher_df( team_id )
+    df_p, _ = _filter_pitcher_df( df_pre, start_date, end_date, selected_team, pitcher_name )
+    if df_p.empty:
+        return None
+    history_df = calc_appearance_history( df_p )
+    buf = plot_appearance_history( history_df )
+    return buf.getvalue() if buf else None
+
+
+@st.cache_data( show_spinner=False )
+def _cached_side_stats( team_id, start_date, end_date, selected_team, pitcher_name, side ):
+    """stats table bytes + pie chart bytes + pt_list を返す。"""
+    df_pre = _get_pitcher_df( team_id )
+    df_p, _ = _filter_pitcher_df( df_pre, start_date, end_date, selected_team, pitcher_name )
+    pt_list = calc_ptList( df_p, batter_side=side )
+    if not pt_list:
+        return None, None, []
+    stats_dict = {}
+    for pt in pt_list:
+        stats_dict = calc_stats( df_p, pitch_type=pt, batter_side=side, stats_dict=stats_dict )
+    stats_df  = convert_stats_dict_to_df( stats_dict )
+    fig_table = plot_statsTable( stats_df )
+    fig_pie   = pt_pieChart( df_p, PITCH_TYPE_COLORS, batter_side=side )
+    return (
+        _fig_to_image( fig_table, dpi=_TABLE_DPI ).getvalue(),
+        _fig_to_image( fig_pie,   dpi=200         ).getvalue(),
+        pt_list,
+    )
+
+
+@st.cache_data( show_spinner=False )
+def _cached_count_pie( team_id, start_date, end_date, selected_team, pitcher_name, side, b, s ):
+    df_pre = _get_pitcher_df( team_id )
+    df_p, _ = _filter_pitcher_df( df_pre, start_date, end_date, selected_team, pitcher_name )
+    fig = pt_pieChart(
+        df_p, PITCH_TYPE_COLORS, batter_side=side,
+        S=s, B=b, show_labels=False,
+        figsize=( 3.0, 1.0 ), count_label=f'{ b }-{ s }',
+    )
+    return _fig_to_image( fig, dpi=100, tight=False ).getvalue()
+
+
+@st.cache_data( show_spinner=False )
+def _cached_course_plots( team_id, start_date, end_date, selected_team, pitcher_name, side, pt ):
+    """(dist_bytes, detail_bytes, batted_bytes) を返す。"""
+    df_pre = _get_pitcher_df( team_id )
+    df_p, _ = _filter_pitcher_df( df_pre, start_date, end_date, selected_team, pitcher_name )
+    buf_dist   = course_distPlot(   df_p, pitch_type=pt, batter_side=side )
+    buf_detail = course_detailPlot( df_p, pitch_type=pt, batter_side=side )
+    buf_batted = batted_ball_plot(  df_p, pitch_type=pt, batter_side=side )
+    return (
+        buf_dist.getvalue()   if buf_dist   else None,
+        buf_detail.getvalue() if buf_detail else None,
+        buf_batted.getvalue() if buf_batted else None,
+    )
+
+
 def _render_side_tab( df_p: pd.DataFrame, side: str, side_label: str ):
     pt_list = calc_ptList( df_p, batter_side = side )
     if not pt_list:
@@ -163,21 +291,21 @@ def show():
     with col_reload:
         if st.button( 'データを更新', key='pa_reload' ):
             _load_plays_df.clear()
+            _get_pitcher_df.clear()
             st.rerun()
     st.header( '投手分析' )
 
     team_id = st.session_state.get( 'logged_in_team_id' )
-    df = _load_plays_df( team_id )
+    df_pre  = _get_pitcher_df( team_id )
 
-    if df.empty:
+    if df_pre.empty:
         st.warning( 'データがありません。先に試合データを入力してください。' )
         return
 
-    # ── 期間フィルター ────────────────────────────────────────
-    df[ '_date' ] = pd.to_datetime( df[ '試合日時' ], errors = 'coerce' )
-    valid_dates   = df[ '_date' ].dropna()
-    date_min      = valid_dates.min().date() if not valid_dates.empty else datetime.date.today()
-    date_max      = valid_dates.max().date() if not valid_dates.empty else datetime.date.today()
+    # ── 期間・チーム・投手選択 ────────────────────────────────
+    valid_dates = df_pre[ '_date' ].dropna()
+    date_min    = valid_dates.min().date() if not valid_dates.empty else datetime.date.today()
+    date_max    = valid_dates.max().date() if not valid_dates.empty else datetime.date.today()
 
     col_start, col_end, col_team, col_pitcher = st.columns( 4 )
 
@@ -186,91 +314,122 @@ def show():
     with col_end:
         end_date   = st.date_input( '終了日', value = date_max, key = 'pa_end'   )
 
-    df = df[
-        ( df[ '_date' ].dt.date >= start_date ) &
-        ( df[ '_date' ].dt.date <= end_date   )
-    ]
-
-    # ── 守備チーム・投手を並列ドロップダウンで選択 ───────────
-    teams = sorted( df[ '守備チーム' ].dropna().unique().tolist() )
+    # チームリストは全期間から
+    teams = sorted( df_pre[ '守備チーム' ].dropna().unique().tolist() )
     if not teams:
         st.warning( '投手データが見つかりません。' )
         return
 
-    my_team   = st.session_state.get( 'logged_in_team_name', '' )
-    team_idx  = teams.index( my_team ) if my_team in teams else 0
+    my_team  = st.session_state.get( 'logged_in_team_name', '' )
+    team_idx = teams.index( my_team ) if my_team in teams else 0
 
     with col_team:
         selected_team = st.selectbox( '守備チーム', teams, index = team_idx, key = 'pa_team' )
 
-    df_team = df[ df[ '守備チーム' ] == selected_team ]
-    pitchers = sorted( df_team[ '投手氏名' ].dropna().unique().tolist() )
+    # 投手リストは期間フィルタ後から
+    df_team_filtered = df_pre[
+        ( df_pre[ '_date' ].dt.date >= start_date ) &
+        ( df_pre[ '_date' ].dt.date <= end_date   ) &
+        ( df_pre[ '守備チーム' ] == selected_team )
+    ]
+    pitchers = sorted( df_team_filtered[ '投手氏名' ].dropna().unique().tolist() )
 
     with col_pitcher:
         if not pitchers:
             st.selectbox( '投手氏名', [], key = 'pa_pitcher' )
-            st.warning( f'{selected_team} の投手データが見つかりません。' )
+            st.warning( f'{ selected_team } の投手データが見つかりません。' )
             return
         selected_pitcher = st.selectbox( '投手氏名', pitchers, key = 'pa_pitcher' )
 
-    # 投手でフィルタリング（打撃結果が '0' のレコードは除外）
-    df_p = df_team[
-        ( df_team[ '投手氏名' ] == selected_pitcher ) &
-        ( df_team[ '打撃結果' ] != '0' )
-    ].copy()
+    # ── セクション切り替え（radio: 選択中のみ重い処理を実行）────
+    section = st.radio(
+        'セクション',
+        [ '全体', 'vs 右打者', 'vs 左打者', 'コメント', '出力' ],
+        horizontal=True, key='pa_section',
+    )
+    st.divider()
 
-    if df_p.empty:
-        st.warning( f'{selected_pitcher} の投球データが見つかりません。' )
-        return
+    _ck = ( team_id, start_date, end_date, selected_team, selected_pitcher )
 
-    # ── 全体 / vs右打者 / vs左打者 / 出力 タブ ─────────────
-    tab_all, tab_r, tab_l, tab_comment, tab_export = st.tabs( [ '全体', 'vs 右打者', 'vs 左打者', 'コメント', '出力' ] )
-    with tab_all:
+    # ── 全体 ─────────────────────────────────────────────────
+    if section == '全体':
         st.markdown( '**総合スタッツ**' )
-        overall_df = pd.DataFrame( [
-            calc_overallStats( df_p, None,  f'{ selected_pitcher } 全体' ),
-            calc_overallStats( df_p, '右',  'vs右打者' ),
-            calc_overallStats( df_p, '左',  'vs左打者' ),
-            calc_overallStats( df,   None,  '平均値' ),
-        ] )
-        _blank_for_avg  = [ '投球数', '打席数', '安打数', '本塁打数', '奪三振数', '四死球数' ]
-        _game_only_cols = [ '登板数', '投球回', '失点数', '失点率' ]
-        pitcher_label   = f'{ selected_pitcher } 全体'
-        overall_df.loc[ overall_df[ 'index' ] == '平均値', _blank_for_avg ] = '--'
-        overall_df.loc[ overall_df[ 'index' ] != pitcher_label, _game_only_cols ] = '--'
-        fig_overall = plot_overallStatsTable( overall_df )
-        st.image( _fig_to_image( fig_overall, dpi = _TABLE_DPI ), use_container_width = True )
+        raw = _cached_overall_stats( *_ck )
+        if raw:
+            st.image( raw, use_container_width = True )
 
         st.markdown( '**球速分布**' )
-        buf_vel = velocity_dist_plot( df_p, PITCH_TYPE_COLORS )
-        if buf_vel is not None:
-            st.image( buf_vel, use_container_width = True )
+        raw = _cached_velocity_dist( *_ck )
+        if raw:
+            st.image( raw, use_container_width = True )
         else:
             st.info( '球速データがありません。' )
 
         st.markdown( '**被打球性質**' )
-        buf_bat = batted_type_plot(
-            df_p,
-            df_all        = df[ df[ '打撃結果' ] != '0' ],
-            pitcher_name  = selected_pitcher,
-        )
-        if buf_bat is not None:
-            st.image( buf_bat, use_container_width = True )
+        raw = _cached_batted_type( *_ck )
+        if raw:
+            st.image( raw, use_container_width = True )
         else:
             st.info( '被打球データがありません。' )
 
         st.markdown( '**登板履歴**' )
-        history_df = calc_appearance_history( df_p )
-        buf_hist = plot_appearance_history( history_df )
-        if buf_hist is not None:
-            st.image( buf_hist, use_container_width = True )
+        raw = _cached_appearance_history( *_ck )
+        if raw:
+            st.image( raw, use_container_width = True )
         else:
             st.info( '登板履歴データがありません。' )
-    with tab_r:
-        _render_side_tab( df_p, '右', '右打者' )
-    with tab_l:
-        _render_side_tab( df_p, '左', '左打者' )
-    with tab_comment:
+
+    # ── vs 右打者 / vs 左打者 ─────────────────────────────────
+    elif section in ( 'vs 右打者', 'vs 左打者' ):
+        side       = '右' if section == 'vs 右打者' else '左'
+        side_label = '右打者' if side == '右' else '左打者'
+
+        table_raw, pie_raw, pt_list = _cached_side_stats( *_ck, side )
+        if not pt_list:
+            st.info( f'vs { side_label } のデータがありません。' )
+        else:
+            c_table, c_pie_all = st.columns( [ 3, 1 ] )
+            with c_table:
+                st.image( table_raw, use_container_width = True )
+            with c_pie_all:
+                st.image( pie_raw,   use_container_width = True )
+
+            st.markdown( '**カウント別球種分布**' )
+            _DIAG_ROWS = [
+                [ (0,0) ],
+                [ (0,1), (1,0) ],
+                [ (0,2), (1,1), (2,0) ],
+                [ (1,2), (2,1), (3,0) ],
+                [ (2,2), (3,1) ],
+                [ (3,2) ],
+            ]
+            _DIAG_COLS = [ [3], [2,4], [1,3,5], [1,3,5], [2,4], [3] ]
+            for diag_items, positions in zip( _DIAG_ROWS, _DIAG_COLS ):
+                row_cols = st.columns( 7 )
+                for item, pos in zip( diag_items, positions ):
+                    b, s = item
+                    with row_cols[ pos ]:
+                        raw = _cached_count_pie( *_ck, side, b, s )
+                        st.image( raw, use_container_width = True )
+
+            st.markdown( '**コース分布（球種別）**' )
+            pt_list_5  = pt_list[ :5 ]
+            row_chunks = [ pt_list_5[ i : i+5 ] for i in range( 0, len( pt_list_5 ), 5 ) ]
+            for chunk in row_chunks:
+                cols = st.columns( 5 )
+                for j, pt in enumerate( chunk ):
+                    dist_raw, detail_raw, batted_raw = _cached_course_plots( *_ck, side, pt )
+                    if dist_raw:
+                        with cols[ j ]:
+                            st.caption( pt )
+                            st.image( dist_raw,   use_container_width = True )
+                            if detail_raw:
+                                st.image( detail_raw, use_container_width = True )
+                            if batted_raw:
+                                st.image( batted_raw, use_container_width = True )
+
+    # ── コメント ──────────────────────────────────────────────
+    elif section == 'コメント':
         saved_comment = comment_repo.get_comment( team_id, selected_pitcher )
 
         if 'pa_comment_editing' not in st.session_state:
@@ -300,9 +459,12 @@ def show():
                 st.session_state.pa_comment_editing = True
                 st.rerun()
 
-    with tab_export:
-        _export_comment = comment_repo.get_comment( team_id, selected_pitcher )
-        _df_all_filtered = df[ df[ '打撃結果' ] != '0' ]
+    # ── 出力 ──────────────────────────────────────────────────
+    else:
+        _export_comment  = comment_repo.get_comment( team_id, selected_pitcher )
+        df_p, df_all_filtered = _filter_pitcher_df(
+            df_pre, start_date, end_date, selected_team, selected_pitcher
+        )
 
         col_pdf, col_pptx = st.columns( 2 )
 
@@ -311,14 +473,8 @@ def show():
             if st.button( 'PDF 生成', key = 'gen_pdf' ):
                 with st.spinner( 'PDF 生成中...' ):
                     pdf_buf = generate_pitcher_pdf(
-                        df_p,
-                        _df_all_filtered,
-                        selected_pitcher,
-                        selected_team,
-                        start_date,
-                        end_date,
-                        PITCH_TYPE_COLORS,
-                        comment = _export_comment,
+                        df_p, df_all_filtered, selected_pitcher, selected_team,
+                        start_date, end_date, PITCH_TYPE_COLORS, comment=_export_comment,
                     )
                 st.download_button(
                     label     = 'PDF ダウンロード',
@@ -333,14 +489,8 @@ def show():
             if st.button( 'PPTX 生成', key = 'gen_pptx' ):
                 with st.spinner( 'PPTX 生成中...' ):
                     pptx_buf = generate_pitcher_pptx(
-                        df_p,
-                        _df_all_filtered,
-                        selected_pitcher,
-                        selected_team,
-                        start_date,
-                        end_date,
-                        PITCH_TYPE_COLORS,
-                        comment = _export_comment,
+                        df_p, df_all_filtered, selected_pitcher, selected_team,
+                        start_date, end_date, PITCH_TYPE_COLORS, comment=_export_comment,
                     )
                 st.download_button(
                     label     = 'PPTX ダウンロード',
