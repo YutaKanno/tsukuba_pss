@@ -13,6 +13,7 @@ import main_page
 import member
 import pitcher_analysis
 import pitcher_stats_mode
+import batter_stats_mode
 import score_card
 from db import game_repo, player_repo, schema, user_repo
 import extra_streamlit_components as _stx
@@ -303,21 +304,26 @@ if st.session_state.page_ctg == "start":
     if st.session_state.get( "pending_analysis_select" ):
         st.divider()
         st.markdown( "#### 分析モードを選択してください" )
-        _ac1, _ac2, _ac3, _ac4 = st.columns( 4 )
+        _ac1, _ac2, _ac3, _ac4, _ac5 = st.columns( 5 )
         with _ac1:
-            if st.button( "📊 スタッツ作成", type = "primary", use_container_width = True ):
+            if st.button( "📊 投手スタッツ", type = "primary", use_container_width = True ):
                 st.session_state.page_ctg = "pitcher_stats_mode"
                 st.session_state.pop( "pending_analysis_select", None )
                 st.rerun()
         with _ac2:
+            if st.button( "🏏 打者スタッツ", type = "primary", use_container_width = True ):
+                st.session_state.page_ctg = "batter_stats_mode"
+                st.session_state.pop( "pending_analysis_select", None )
+                st.rerun()
+        with _ac3:
             if st.button( "⚾ 投手分析", type = "primary", use_container_width = True ):
                 st.session_state.page_ctg = "pitcher_analysis"
                 st.session_state.pop( "pending_analysis_select", None )
                 st.rerun()
-        with _ac3:
+        with _ac4:
             st.button( "🏃 打者分析", disabled = True, use_container_width = True )
             st.caption( "（準備中）" )
-        with _ac4:
+        with _ac5:
             if st.button( "📋 スコア表", type = "primary", use_container_width = True ):
                 st.session_state.page_ctg = "score_card"
                 st.session_state.pop( "pending_analysis_select", None )
@@ -762,6 +768,9 @@ elif st.session_state.page_ctg == "pitcher_analysis":
 
 elif st.session_state.page_ctg == "pitcher_stats_mode":
     pitcher_stats_mode.show()
+
+elif st.session_state.page_ctg == "batter_stats_mode":
+    batter_stats_mode.show()
 
 elif st.session_state.page_ctg == "score_card":
     score_card.show()
