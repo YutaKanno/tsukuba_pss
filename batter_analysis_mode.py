@@ -1,5 +1,6 @@
 """打者分析モード – 攻撃分析 / 作戦分析（盗塁）"""
 import datetime
+import gc
 import io
 import os
 
@@ -1007,12 +1008,6 @@ def _generate_player_pdf(
     N_COLS    = 5
     cell_w    = CONTENT_W / N_COLS
 
-    buf_out = io.BytesIO()
-    doc = SimpleDocTemplate(
-        buf_out, pagesize=PAGE_SIZE,
-        leftMargin=MARGIN, rightMargin=MARGIN,
-        topMargin=MARGIN, bottomMargin=MARGIN,
-    )
     PITCH_TYPE_GROUPS = [
         ( 'ストレート', [ 'ストレート' ] ),
         ( 'スラ系',    [ 'スライダー', 'カット', 'カーブ' ] ),
@@ -1029,7 +1024,7 @@ def _generate_player_pdf(
         df_pt = pd.DataFrame( rows )
         if stats_cols:
             df_pt = df_pt[ list( stats_cols ) ]
-        return _fig_to_image( plot_battingStatsTable( df_pt, highlight_last=False ) )
+        return _fig_to_image( plot_battingStatsTable( df_pt, highlight_last=False ), dpi=200 )
 
     lbl_para_style = ParagraphStyle( 'cl', fontName=font, fontSize=7, alignment=1 )
 
@@ -1100,7 +1095,7 @@ def _generate_player_pdf(
             df_st = df_st[ list( stats_cols ) ]
         elems.append( _section_heading_rl( 'スタッツ' ) )
         elems.append( Spacer( 1, 2 * mm ) )
-        elems.append( _buf_to_rl( _fig_to_image( plot_battingStatsTable( df_st ) ), CONTENT_W ) )
+        elems.append( _buf_to_rl( _fig_to_image( plot_battingStatsTable( df_st ), dpi=200 ), CONTENT_W ) )
         elems.append( Spacer( 1, 4 * mm ) )
 
         course_row = []
@@ -1135,32 +1130,47 @@ def _generate_player_pdf(
             elems.append( grid )
         return elems
 
-    story = []
+    from pypdf import PdfWriter, PdfReader
 
-    for i, batter in enumerate( selected_batters ):
+    writer = PdfWriter()
+    for batter in selected_batters:
         df_b     = df_team[ df_team[ '打者氏名' ] == batter ]
         df_right = df_b[ df_b[ '投手左右' ] == '右' ] \
             if '投手左右' in df_b.columns else df_b.iloc[ 0:0 ]
         df_left  = df_b[ df_b[ '投手左右' ] == '左' ] \
             if '投手左右' in df_b.columns else df_b.iloc[ 0:0 ]
 
-        if i > 0:
-            story.append( PageBreak() )
+        story_one = []
 
         # ページ1: ヘッダー + コメント + スタッツ + コース別打率
-        story.extend( _page1_elements( batter, df_b, df_right, df_left ) )
+        story_one.extend( _page1_elements( batter, df_b, df_right, df_left ) )
 
         # ページ2: 対右投手（ヘッダーなし）
         if not df_right.empty:
-            story.append( PageBreak() )
-            story.extend( _side_elements( df_right, '対右投手' ) )
+            story_one.append( PageBreak() )
+            story_one.extend( _side_elements( df_right, '対右投手' ) )
 
         # ページ3: 対左投手（ヘッダーなし）
         if not df_left.empty:
-            story.append( PageBreak() )
-            story.extend( _side_elements( df_left, '対左投手' ) )
+            story_one.append( PageBreak() )
+            story_one.extend( _side_elements( df_left, '対左投手' ) )
 
-    doc.build( story )
+        buf_one = io.BytesIO()
+        doc_one = SimpleDocTemplate(
+            buf_one, pagesize=PAGE_SIZE,
+            leftMargin=MARGIN, rightMargin=MARGIN,
+            topMargin=MARGIN, bottomMargin=MARGIN,
+        )
+        doc_one.build( story_one )
+        buf_one.seek( 0 )
+        reader = PdfReader( buf_one )
+        for page in reader.pages:
+            writer.add_page( page )
+        del buf_one, reader, story_one
+        gc.collect()
+
+    buf_out = io.BytesIO()
+    writer.write( buf_out )
     buf_out.seek( 0 )
     return buf_out
 

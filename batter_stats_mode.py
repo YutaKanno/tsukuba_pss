@@ -163,7 +163,7 @@ def _generate_stats_pdf(
             continue
 
         fig     = plot_battingStatsTable( df_stats )
-        img_buf = _fig_to_image( fig, dpi = 400 )
+        img_buf = _fig_to_image( fig, dpi = 200 )
         story.append( KeepTogether( [
             _section_heading( label, font ),
             Spacer( 1, 2 * mm ),
