@@ -22,8 +22,7 @@ from reportlab.platypus import Image as RLImage
 
 from pitching.calc_stats import calc_overallStats
 from pitching.plot_overallStatsTable import plot_overallStatsTable
-# キャッシュ済みデータローダーを投手分析モードと共有
-from pitcher_analysis import _load_plays_df
+from plays_cache import get_cached_team_plays_df
 
 
 # ── PDF レイアウト定数 ──────────────────────────────────────────
@@ -182,14 +181,13 @@ def show():
     st.header('スタッツ作成')
 
     team_id = st.session_state.get('logged_in_team_id')
-    df = _load_plays_df(team_id)
+    df = get_cached_team_plays_df(team_id)
 
     if df.empty:
         st.warning('データがありません。先に試合データを入力してください。')
         return
 
     # ── 期間フィルター ────────────────────────────────────────
-    df['_date'] = pd.to_datetime(df['試合日時'], errors='coerce')
     valid_dates = df['_date'].dropna()
     date_min = valid_dates.min().date() if not valid_dates.empty else datetime.date.today()
     date_max = valid_dates.max().date() if not valid_dates.empty else datetime.date.today()

@@ -5,7 +5,6 @@ import datetime
 import matplotlib
 matplotlib.use( 'Agg' )
 
-import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import streamlit as st
@@ -23,8 +22,7 @@ from reportlab.platypus import Image as RLImage
 
 from batting.calc_stats import calc_batting_stats
 from batting.plot_statsTable import plot_battingStatsTable
-# キャッシュ済みデータローダーを投手分析モードと共有
-from pitcher_analysis import _load_plays_df
+from plays_cache import get_cached_team_plays_df
 
 
 # ── PDF レイアウト定数 ──────────────────────────────────────────
@@ -187,18 +185,13 @@ def show() -> None:
     st.header( '打者スタッツ' )
 
     team_id = st.session_state.get( 'logged_in_team_id' )
-    df = _load_plays_df( team_id )
+    df = get_cached_team_plays_df( team_id )
 
     if df.empty:
         st.warning( 'データがありません。先に試合データを入力してください。' )
         return
 
-    # 攻撃チームを導出
-    df = df.copy()
-    df[ '攻撃チーム' ] = np.where( df[ '表裏' ] == '表', df[ '先攻チーム' ], df[ '後攻チーム' ] )
-
     # ── 期間フィルター ────────────────────────────────────────
-    df[ '_date' ]  = pd.to_datetime( df[ '試合日時' ], errors = 'coerce' )
     valid_dates = df[ '_date' ].dropna()
     date_min = valid_dates.min().date() if not valid_dates.empty else datetime.date.today()
     date_max = valid_dates.max().date() if not valid_dates.empty else datetime.date.today()

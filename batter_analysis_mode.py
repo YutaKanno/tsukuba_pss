@@ -16,7 +16,7 @@ from batting.analyse_strategy import (
     analyse_R2_strategy,
     COUNT_KEYS,
 )
-from pitcher_analysis import _load_plays_df
+from plays_cache import clear_team_plays_cache, get_cached_team_plays_df
 from db import batter_comment_repo
 from batter_stats_mode import (
     _build_stats_df,
@@ -43,6 +43,8 @@ _register_fonts()
 
 
 # ── カラーパレット ──────────────────────────────────────────────
+_IMG_CACHE = dict( ttl=1800, max_entries=48, show_spinner=False )
+
 _COLORS = {
     '単打'   : '#4CAF50',
     '長打'   : '#1565C0',
@@ -743,18 +745,6 @@ def _show_bunt_section( df_team: pd.DataFrame ):
 # ── キャッシュ付き描画ヘルパー ────────────────────────────────────
 # キャッシュキーはプリミティブ値のみ（DataFrame ハッシュコスト削減）
 
-@st.cache_data( show_spinner=False )
-def _get_preprocessed_df( team_id: int ) -> pd.DataFrame:
-    """攻撃チーム列・_date列を付加したDataFrameをteam_idでキャッシュ。"""
-    df = _load_plays_df( team_id )
-    if df.empty:
-        return df
-    df = df.copy()
-    df[ '攻撃チーム' ] = np.where( df[ '表裏' ] == '表', df[ '先攻チーム' ], df[ '後攻チーム' ] )
-    df[ '_date' ] = pd.to_datetime( df[ '試合日時' ], errors='coerce' )
-    return df
-
-
 def _apply_filters( df: pd.DataFrame, start_date, end_date, selected_team ):
     """(df_team, df_team_all) を返す高速フィルタ（キャッシュなし）。"""
     df_team_all = df[ df[ '攻撃チーム' ] == selected_team ]
@@ -766,13 +756,13 @@ def _apply_filters( df: pd.DataFrame, start_date, end_date, selected_team ):
     return df_team, df_team_all
 
 
-@st.cache_data( show_spinner=False )
+@st.cache_data( **_IMG_CACHE )
 def _cached_stats_list_image(
     team_id: int, start_date, end_date, selected_team: str, side
 ) -> bytes | None:
     """スタッツ一覧タブの統計テーブル画像（side: None/'右'/'左'）。"""
     from batting.plot_statsTable import plot_battingStatsTable
-    df = _get_preprocessed_df( team_id )
+    df = get_cached_team_plays_df( team_id )
     if df.empty:
         return None
     df_team, _ = _apply_filters( df, start_date, end_date, selected_team )
@@ -783,12 +773,12 @@ def _cached_stats_list_image(
     return _fig_to_image( fig, dpi=300 ).getvalue()
 
 
-@st.cache_data( show_spinner=False )
+@st.cache_data( **_IMG_CACHE )
 def _cached_strategy_figure(
     team_id: int, start_date, end_date, selected_team: str
 ) -> bytes:
     """チーム作戦分析の円グラフ画像。"""
-    df = _get_preprocessed_df( team_id )
+    df = get_cached_team_plays_df( team_id )
     df_filtered = df[
         ( df[ '_date' ].dt.date >= start_date ) &
         ( df[ '_date' ].dt.date <= end_date   )
@@ -809,12 +799,12 @@ def _cached_strategy_figure(
     return buf.getvalue()
 
 
-@st.cache_data( show_spinner=False )
+@st.cache_data( **_IMG_CACHE )
 def _cached_course_chart(
     team_id: int, start_date, end_date, selected_team: str,
     batter_name: str, side
 ) -> bytes | None:
-    df = _get_preprocessed_df( team_id )
+    df = get_cached_team_plays_df( team_id )
     if df.empty:
         return None
     df_team, _ = _apply_filters( df, start_date, end_date, selected_team )
@@ -826,13 +816,13 @@ def _cached_course_chart(
     return buf.getvalue() if buf else None
 
 
-@st.cache_data( show_spinner=False )
+@st.cache_data( **_IMG_CACHE )
 def _cached_detail_plot(
     team_id: int, start_date, end_date, selected_team: str,
     batter_name: str, side, pitch_type: str
 ) -> bytes | None:
     from pitching.plot_courseDetail import course_detailPlot
-    df = _get_preprocessed_df( team_id )
+    df = get_cached_team_plays_df( team_id )
     if df.empty:
         return None
     df_team, _ = _apply_filters( df, start_date, end_date, selected_team )
@@ -844,13 +834,13 @@ def _cached_detail_plot(
     return buf.getvalue() if buf else None
 
 
-@st.cache_data( show_spinner=False )
+@st.cache_data( **_IMG_CACHE )
 def _cached_batted_plot(
     team_id: int, start_date, end_date, selected_team: str,
     batter_name: str, side, pitch_type: str
 ) -> bytes | None:
     from pitching.plot_battedBall import batted_ball_plot
-    df = _get_preprocessed_df( team_id )
+    df = get_cached_team_plays_df( team_id )
     if df.empty:
         return None
     df_team, _ = _apply_filters( df, start_date, end_date, selected_team )
@@ -862,14 +852,14 @@ def _cached_batted_plot(
     return buf.getvalue() if buf else None
 
 
-@st.cache_data( show_spinner=False )
+@st.cache_data( **_IMG_CACHE )
 def _cached_stats_table(
     team_id: int, start_date, end_date, selected_team: str,
     batter_name: str, stats_cols
 ) -> bytes:
     from batting.calc_stats import calc_batting_stats
     from batting.plot_statsTable import plot_battingStatsTable
-    df = _get_preprocessed_df( team_id )
+    df = get_cached_team_plays_df( team_id )
     df_team, df_team_all = _apply_filters( df, start_date, end_date, selected_team )
     df_b     = df_team    [ df_team    [ '打者氏名' ] == batter_name ]
     df_b_all = df_team_all[ df_team_all[ '打者氏名' ] == batter_name ]
@@ -891,14 +881,14 @@ def _cached_stats_table(
     return _fig_to_image( plot_battingStatsTable( df_st ), dpi=300 ).getvalue()
 
 
-@st.cache_data( show_spinner=False )
+@st.cache_data( **_IMG_CACHE )
 def _cached_pitchtype_stats(
     team_id: int, start_date, end_date, selected_team: str,
     batter_name: str, side, stats_cols
 ) -> bytes:
     from batting.calc_stats import calc_batting_stats
     from batting.plot_statsTable import plot_battingStatsTable
-    df = _get_preprocessed_df( team_id )
+    df = get_cached_team_plays_df( team_id )
     df_team, _ = _apply_filters( df, start_date, end_date, selected_team )
     df_b = df_team[ df_team[ '打者氏名' ] == batter_name ]
     df_side = df_b if side is None else (
@@ -1308,12 +1298,11 @@ def show() -> None:
         st.button( '← スタートに戻る', on_click=_go_start )
     with col_reload:
         if st.button( 'データを更新', key='bam_reload' ):
-            _load_plays_df.clear()
-            _get_preprocessed_df.clear()
+            clear_team_plays_cache()
             st.rerun()
 
     team_id = st.session_state.get( 'logged_in_team_id' )
-    df_pre  = _get_preprocessed_df( team_id )
+    df_pre  = get_cached_team_plays_df( team_id )
 
     if df_pre.empty:
         st.warning( 'データがありません。先に試合データを入力してください。' )

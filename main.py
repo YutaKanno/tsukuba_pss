@@ -8,14 +8,6 @@ import pandas as pd
 import streamlit as st
 
 import auth as _auth
-import db_admin
-import main_page
-import member
-import pitcher_analysis
-import pitcher_stats_mode
-import batter_stats_mode
-import batter_analysis_mode
-import score_card
 from db import game_repo, player_repo, schema, user_repo
 import extra_streamlit_components as _stx
 
@@ -704,6 +696,8 @@ if st.session_state.page_ctg == "start":
                 st.success("パスワードを変更しました。次回ログイン時から有効です。")
 
 elif st.session_state.page_ctg == "member":
+    import member
+
     if member_df is None:
         st.warning("チームに選手が登録されていません。下の「スタートへ」で戻り、チーム・選手登録で選手を追加してください。")
         if st.button("スタートへ"):
@@ -769,24 +763,38 @@ elif st.session_state.page_ctg == "member":
         st.session_state["already_rerun"] = False
 
 elif st.session_state.page_ctg == "pitcher_analysis":
+    import pitcher_analysis
+
     pitcher_analysis.show()
 
 elif st.session_state.page_ctg == "pitcher_stats_mode":
+    import pitcher_stats_mode
+
     pitcher_stats_mode.show()
 
 elif st.session_state.page_ctg == "batter_stats_mode":
+    import batter_stats_mode
+
     batter_stats_mode.show()
 
 elif st.session_state.page_ctg == "batter_analysis_mode":
+    import batter_analysis_mode
+
     batter_analysis_mode.show()
 
 elif st.session_state.page_ctg == "score_card":
+    import score_card
+
     score_card.show()
 
 elif st.session_state.page_ctg == "db_admin":
+    import db_admin
+
     db_admin.run()
 
 elif st.session_state.page_ctg == "main":
+    import main_page
+
     all_list = st.session_state["all_list"]
     if "temp_list" not in st.session_state:
         if all_list:

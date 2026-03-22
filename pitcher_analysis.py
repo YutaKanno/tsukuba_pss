@@ -9,8 +9,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import streamlit as st
 
-from db import game_repo
 from db import comment_repo
+from plays_cache import clear_team_plays_cache, get_cached_team_plays_df
 from pitching.calc_ptList import calc_ptList
 from pitching.calc_stats import calc_stats, convert_stats_dict_to_df, calc_overallStats, calc_appearance_history
 from pitching.plot_statsTable import plot_statsTable
@@ -40,25 +40,7 @@ PITCH_TYPE_COLORS = {
 
 _TABLE_DPI = 300
 
-
-def _add_analysis_cols( df: pd.DataFrame ) -> pd.DataFrame:
-    df = df.copy()
-    df[ '守備チーム' ] = np.where( df[ '表裏' ] == '表', df[ '後攻チーム' ], df[ '先攻チーム' ] )
-    df[ 'コースYadj' ]   = 263 - pd.to_numeric( df[ 'コースY' ],    errors = 'coerce' )
-    df[ '打球位置Yadj' ] = 263 - pd.to_numeric( df[ '打球位置Y' ], errors = 'coerce' )
-    return df
-
-
-@st.cache_data
-def _load_plays_df( team_id: int ) -> pd.DataFrame:
-    df = game_repo.get_all_plays_df( team_id )
-    if df.empty:
-        return df
-    for col in [ 'コースX', 'コースY', '打球位置X', '打球位置Y', 'S', 'B', '構え' ]:
-        if col in df.columns:
-            df[ col ] = pd.to_numeric( df[ col ], errors = 'coerce' )
-    df = df[ df[ '球種' ] != '特殊球' ]
-    return _add_analysis_cols( df )
+_IMG_CACHE = dict( ttl=1800, max_entries=48, show_spinner=False )
 
 
 def _fig_to_image( fig: plt.Figure, dpi: int, tight: bool = True ) -> io.BytesIO:
@@ -73,17 +55,6 @@ def _fig_to_image( fig: plt.Figure, dpi: int, tight: bool = True ) -> io.BytesIO
 
 
 # ── キャッシュ付き描画ヘルパー（プリミティブキー）─────────────────
-
-@st.cache_data
-def _get_pitcher_df( team_id: int ) -> pd.DataFrame:
-    """_load_plays_df に _date 列を追加してキャッシュ。"""
-    df = _load_plays_df( team_id )
-    if df.empty:
-        return df
-    df = df.copy()
-    df[ '_date' ] = pd.to_datetime( df[ '試合日時' ], errors = 'coerce' )
-    return df
-
 
 def _filter_pitcher_df( df_pre, start_date, end_date, selected_team, pitcher_name ):
     """(df_p, df_all_filtered) を返す高速フィルタ（キャッシュなし）。"""
@@ -100,9 +71,9 @@ def _filter_pitcher_df( df_pre, start_date, end_date, selected_team, pitcher_nam
     return df_p, df_all_filtered
 
 
-@st.cache_data( show_spinner=False )
+@st.cache_data( **_IMG_CACHE )
 def _cached_overall_stats( team_id, start_date, end_date, selected_team, pitcher_name ):
-    df_pre = _get_pitcher_df( team_id )
+    df_pre = get_cached_team_plays_df( team_id )
     df_p, df_all = _filter_pitcher_df( df_pre, start_date, end_date, selected_team, pitcher_name )
     if df_p.empty:
         return None
@@ -121,9 +92,9 @@ def _cached_overall_stats( team_id, start_date, end_date, selected_team, pitcher
     return _fig_to_image( fig, dpi=_TABLE_DPI ).getvalue()
 
 
-@st.cache_data( show_spinner=False )
+@st.cache_data( **_IMG_CACHE )
 def _cached_velocity_dist( team_id, start_date, end_date, selected_team, pitcher_name ):
-    df_pre = _get_pitcher_df( team_id )
+    df_pre = get_cached_team_plays_df( team_id )
     df_p, _ = _filter_pitcher_df( df_pre, start_date, end_date, selected_team, pitcher_name )
     if df_p.empty:
         return None
@@ -131,9 +102,9 @@ def _cached_velocity_dist( team_id, start_date, end_date, selected_team, pitcher
     return buf.getvalue() if buf else None
 
 
-@st.cache_data( show_spinner=False )
+@st.cache_data( **_IMG_CACHE )
 def _cached_batted_type( team_id, start_date, end_date, selected_team, pitcher_name ):
-    df_pre = _get_pitcher_df( team_id )
+    df_pre = get_cached_team_plays_df( team_id )
     df_p, df_all = _filter_pitcher_df( df_pre, start_date, end_date, selected_team, pitcher_name )
     if df_p.empty:
         return None
@@ -141,9 +112,9 @@ def _cached_batted_type( team_id, start_date, end_date, selected_team, pitcher_n
     return buf.getvalue() if buf else None
 
 
-@st.cache_data( show_spinner=False )
+@st.cache_data( **_IMG_CACHE )
 def _cached_appearance_history( team_id, start_date, end_date, selected_team, pitcher_name ):
-    df_pre = _get_pitcher_df( team_id )
+    df_pre = get_cached_team_plays_df( team_id )
     df_p, _ = _filter_pitcher_df( df_pre, start_date, end_date, selected_team, pitcher_name )
     if df_p.empty:
         return None
@@ -152,10 +123,10 @@ def _cached_appearance_history( team_id, start_date, end_date, selected_team, pi
     return buf.getvalue() if buf else None
 
 
-@st.cache_data( show_spinner=False )
+@st.cache_data( **_IMG_CACHE )
 def _cached_side_stats( team_id, start_date, end_date, selected_team, pitcher_name, side ):
     """stats table bytes + pie chart bytes + pt_list を返す。"""
-    df_pre = _get_pitcher_df( team_id )
+    df_pre = get_cached_team_plays_df( team_id )
     df_p, _ = _filter_pitcher_df( df_pre, start_date, end_date, selected_team, pitcher_name )
     pt_list = calc_ptList( df_p, batter_side=side )
     if not pt_list:
@@ -173,9 +144,9 @@ def _cached_side_stats( team_id, start_date, end_date, selected_team, pitcher_na
     )
 
 
-@st.cache_data( show_spinner=False )
+@st.cache_data( **_IMG_CACHE )
 def _cached_count_pie( team_id, start_date, end_date, selected_team, pitcher_name, side, b, s ):
-    df_pre = _get_pitcher_df( team_id )
+    df_pre = get_cached_team_plays_df( team_id )
     df_p, _ = _filter_pitcher_df( df_pre, start_date, end_date, selected_team, pitcher_name )
     fig = pt_pieChart(
         df_p, PITCH_TYPE_COLORS, batter_side=side,
@@ -185,10 +156,10 @@ def _cached_count_pie( team_id, start_date, end_date, selected_team, pitcher_nam
     return _fig_to_image( fig, dpi=100, tight=False ).getvalue()
 
 
-@st.cache_data( show_spinner=False )
+@st.cache_data( **_IMG_CACHE )
 def _cached_course_plots( team_id, start_date, end_date, selected_team, pitcher_name, side, pt ):
     """(dist_bytes, detail_bytes, batted_bytes) を返す。"""
-    df_pre = _get_pitcher_df( team_id )
+    df_pre = get_cached_team_plays_df( team_id )
     df_p, _ = _filter_pitcher_df( df_pre, start_date, end_date, selected_team, pitcher_name )
     buf_dist   = course_distPlot(   df_p, pitch_type=pt, batter_side=side )
     buf_detail = course_detailPlot( df_p, pitch_type=pt, batter_side=side )
@@ -290,13 +261,12 @@ def show():
         st.button( '← スタートに戻る', on_click = _go_start )
     with col_reload:
         if st.button( 'データを更新', key='pa_reload' ):
-            _load_plays_df.clear()
-            _get_pitcher_df.clear()
+            clear_team_plays_cache()
             st.rerun()
     st.header( '投手分析' )
 
     team_id = st.session_state.get( 'logged_in_team_id' )
-    df_pre  = _get_pitcher_df( team_id )
+    df_pre  = get_cached_team_plays_df( team_id )
 
     if df_pre.empty:
         st.warning( 'データがありません。先に試合データを入力してください。' )
