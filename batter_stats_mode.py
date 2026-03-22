@@ -123,6 +123,11 @@ def _build_stats_df( df_team: pd.DataFrame, pitcher_side ) -> pd.DataFrame:
         return pd.DataFrame()
     df_stats = pd.DataFrame( rows )
     df_stats = df_stats.sort_values( '打席数', ascending = False ).reset_index( drop = True )
+
+    # チーム計行
+    team_row = calc_batting_stats( df_team, pitcher_side, 'チーム計' )
+    df_team_row = pd.DataFrame( [ team_row ] )
+    df_stats = pd.concat( [ df_stats, df_team_row ], ignore_index = True )
     return df_stats
 
 
@@ -160,7 +165,7 @@ def _generate_stats_pdf(
             continue
 
         fig     = plot_battingStatsTable( df_stats )
-        img_buf = _fig_to_image( fig, dpi = 200 )
+        img_buf = _fig_to_image( fig, dpi = 400 )
         story.append( KeepTogether( [
             _section_heading( label, font ),
             Spacer( 1, 2 * mm ),

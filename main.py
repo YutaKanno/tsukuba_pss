@@ -14,6 +14,7 @@ import member
 import pitcher_analysis
 import pitcher_stats_mode
 import batter_stats_mode
+import batter_analysis_mode
 import score_card
 from db import game_repo, player_repo, schema, user_repo
 import extra_streamlit_components as _stx
@@ -321,8 +322,10 @@ if st.session_state.page_ctg == "start":
                 st.session_state.pop( "pending_analysis_select", None )
                 st.rerun()
         with _ac4:
-            st.button( "🏃 打者分析", disabled = True, use_container_width = True )
-            st.caption( "（準備中）" )
+            if st.button( "🏃 打者分析", type = "primary", use_container_width = True ):
+                st.session_state.page_ctg = "batter_analysis_mode"
+                st.session_state.pop( "pending_analysis_select", None )
+                st.rerun()
         with _ac5:
             if st.button( "📋 スコア表", type = "primary", use_container_width = True ):
                 st.session_state.page_ctg = "score_card"
@@ -771,6 +774,9 @@ elif st.session_state.page_ctg == "pitcher_stats_mode":
 
 elif st.session_state.page_ctg == "batter_stats_mode":
     batter_stats_mode.show()
+
+elif st.session_state.page_ctg == "batter_analysis_mode":
+    batter_analysis_mode.show()
 
 elif st.session_state.page_ctg == "score_card":
     score_card.show()

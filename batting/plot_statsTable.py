@@ -37,8 +37,16 @@ _RATE3_FULL_COLS = { 'OPS' }
 
 # round0 + % 表示する列
 _PCT_COLS = {
-    'K%', 'BB%', 'スイング率', 'ゾーン外SW%', '空振り率',
-    '1stSW率', 'ゴロ率', 'フライ率',
+    'K%', 'BB%', 'スイング率', 'ゾーン外スイング率', '空振り率',
+    '1stストライクスイング率', 'ゴロ率', 'フライ率',
+}
+
+# 長い列名を折り返す表示名マップ
+_DISPLAY_NAMES = {
+    'ゾーン外スイング率'           : 'ゾーン外\nスイング率',
+    '1stストライクスイング率' : '1stストライク\nスイング率',
+    '2S以降平均投球数'             : '2S以降\n平均投球数',
+    '平均投球数'                   : '平均\n投球数',
 }
 
 
@@ -47,7 +55,7 @@ def plot_battingStatsTable( df: pd.DataFrame ) -> plt.Figure:
     cols      = df.columns.tolist()
     col_count = len( cols )
 
-    display_cols = [ '' if c == 'index' else c for c in cols ]
+    display_cols = [ '' if c == 'index' else _DISPLAY_NAMES.get( c, c ) for c in cols ]
 
     df_disp = df.copy()
     for col in _RATE3_COLS:
@@ -70,7 +78,8 @@ def plot_battingStatsTable( df: pd.DataFrame ) -> plt.Figure:
     all_text  = [ display_cols ] + df_disp.values.tolist()
     total_row = len( all_text )
 
-    figsize = ( col_count * 0.88, total_row * 0.42 )
+    max_header_lines = max( ( h.count( '\n' ) + 1 ) for h in display_cols )
+    figsize = ( col_count * 0.88, ( total_row - 1 + max_header_lines * 1.2 ) * 0.42 )
 
     fig, ax = plt.subplots( figsize = figsize, dpi = 300 )
     ax.axis( 'off' )
@@ -129,6 +138,26 @@ def plot_battingStatsTable( df: pd.DataFrame ) -> plt.Figure:
 
     fig.canvas.draw()
 
+    # ヘッダーが \n で折り返されている列は、折り返し前の最長行で幅を再設定
+    renderer = fig.canvas.get_renderer()
+    for col, hdr in enumerate( display_cols ):
+        if '\n' not in hdr:
+            continue
+        if ( 0, col ) not in table._cells:
+            continue
+        cell     = table._cells[ 0, col ]
+        txt_obj  = cell.get_text()
+        max_line = max( hdr.split( '\n' ), key=len )
+        orig_text = txt_obj.get_text()
+        txt_obj.set_text( max_line )
+        bb = txt_obj.get_window_extent( renderer )
+        txt_obj.set_text( orig_text )
+        needed_w = ( bb.width / fig.dpi ) / figsize[ 0 ] + 0.01
+        if needed_w > cell.get_width():
+            for r in range( total_row ):
+                if ( r, col ) in table._cells:
+                    table._cells[ r, col ].set_width( needed_w )
+
     def _add_patch( row_idx, col_start, col_end, color ):
         first  = table[ row_idx, col_start ]
         last   = table[ row_idx, col_end ]
@@ -141,10 +170,19 @@ def plot_battingStatsTable( df: pd.DataFrame ) -> plt.Figure:
             transform = ax.transAxes, zorder = 1,
         ) )
 
+    _COLOR_TEAM = '#2C5F8A'   # チーム計行の背景色
+
     _add_patch( 0, 0, last_col, _HEADER_COLOR )
-    for r in range( 1, total_row ):
+    for r in range( 1, total_row - 1 ):
         bg = '#EEF2F5' if r % 2 == 0 else 'white'
         _add_patch( r, 0, last_col, bg )
+    # チーム計行（最終行）
+    _add_patch( total_row - 1, 0, last_col, _COLOR_TEAM )
+    for col in range( col_count ):
+        if ( total_row - 1, col ) in table._cells:
+            table._cells[ total_row - 1, col ].set_text_props(
+                color = 'white', fontweight = 'bold'
+            )
 
     plt.subplots_adjust( left = 0, right = 1, top = 1, bottom = 0 )
     return fig

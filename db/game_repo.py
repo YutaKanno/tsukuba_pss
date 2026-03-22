@@ -11,6 +11,18 @@ from typing import Any, List, Optional, Tuple
 from . import schema
 
 
+def _is_conn_error( e: Exception ) -> bool:
+    """接続切断系の例外かどうかを判定する（PostgreSQL 専用）。"""
+    if not schema.is_postgres():
+        return False
+    try:
+        import psycopg2
+        # DatabaseError は OperationalError の親クラスも包含するため DatabaseError で統一
+        return isinstance( e, ( psycopg2.DatabaseError, psycopg2.InterfaceError ) )
+    except ImportError:
+        return False
+
+
 def _get_game_json_path( game_id: int ) -> str:
     data_dir = os.path.dirname( schema.DB_FILE )
     return os.path.join( data_dir, f'game_{game_id}.json' )
@@ -91,20 +103,32 @@ _JSON_COLS = frozenset(['top_poses', 'top_names', 'top_nums', 'top_lrs', 'bottom
 def get_all_plays_df(team_id: int):
     """Return all play data for games owned by team_id as a pandas DataFrame."""
     import pandas as pd
-    conn = schema.get_conn()
-    c = conn.cursor()
-    c.execute(
-        'SELECT * FROM play_data WHERE 試合_id IN '
-        '(SELECT id FROM game WHERE owner_team_id = ?) '
-        'ORDER BY 試合_id, プレイの番号',
-        (team_id,),
-    )
-    rows = c.fetchall()
-    conn.close()
-    if not rows:
-        return pd.DataFrame( columns = _PLAY_DATA_COLS )
-    data = [ _db_row_to_list( r ) for r in rows ]
-    return pd.DataFrame( data, columns = _PLAY_DATA_COLS )
+    last_exc = None
+    for attempt in range(2):
+        conn = schema.get_conn()
+        try:
+            c = conn.cursor()
+            c.execute(
+                'SELECT * FROM play_data WHERE 試合_id IN '
+                '(SELECT id FROM game WHERE owner_team_id = ?) '
+                'ORDER BY 試合_id, プレイの番号',
+                (team_id,),
+            )
+            rows = c.fetchall()
+            if not rows:
+                return pd.DataFrame( columns = _PLAY_DATA_COLS )
+            data = [ _db_row_to_list( r ) for r in rows ]
+            return pd.DataFrame( data, columns = _PLAY_DATA_COLS )
+        except Exception as exc:
+            last_exc = exc
+            schema.release_connection( conn, discard=True )
+            conn = None
+            if attempt == 0:
+                schema.reset_pg_pool()
+        finally:
+            if conn is not None:
+                schema.release_connection( conn )
+    raise last_exc
 
 
 def _db_row_to_list(r: tuple) -> list:
@@ -147,15 +171,37 @@ def create_game(
     from . import player_repo
     top_id = player_repo.ensure_team(先攻チーム名)
     bottom_id = player_repo.ensure_team(後攻チーム名)
-    conn = schema.get_conn()
-    c = conn.cursor()
-    c.execute('''
-        INSERT INTO game (試合日時, Season, Kind, Week, Day, GameNumber, 主審, 先攻チーム_id, 後攻チーム_id, owner_team_id, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (試合日時, Season, Kind, Week, Day, GameNumber, 主審, top_id, bottom_id, owner_team_id, datetime.now().isoformat()))
-    gid = c.lastrowid
-    conn.commit()
-    conn.close()
+    last_exc = None
+    for attempt in range( 2 ):
+        conn = schema.get_conn()
+        try:
+            c = conn.cursor()
+            c.execute('''
+                INSERT INTO game (試合日時, Season, Kind, Week, Day, GameNumber, 主審, 先攻チーム_id, 後攻チーム_id, owner_team_id, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (試合日時, Season, Kind, Week, Day, GameNumber, 主審, top_id, bottom_id, owner_team_id, datetime.now().isoformat()))
+            gid = c.lastrowid
+            conn.commit()
+            schema.release_connection( conn )
+            conn = None
+            break
+        except Exception as exc:
+            last_exc = exc
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            schema.release_connection( conn, discard=_is_conn_error( exc ) )
+            conn = None
+            if _is_conn_error( exc ) and attempt == 0:
+                schema.reset_pg_pool()
+                continue
+            raise
+        finally:
+            if conn is not None:
+                schema.release_connection( conn )
+    else:
+        raise last_exc
     try:
         path = _get_game_json_path( gid )
         game_data = {
@@ -181,40 +227,68 @@ def create_game(
 
 def get_game(game_id):
     """試合1件を取得。"""
-    conn = schema.get_conn()
-    c = conn.cursor()
-    c.execute('SELECT * FROM game WHERE id = ?', (game_id,))
-    row = c.fetchone()
-    conn.close()
-    return row
+    last_exc = None
+    for attempt in range( 2 ):
+        conn = schema.get_conn()
+        try:
+            c = conn.cursor()
+            c.execute('SELECT * FROM game WHERE id = ?', (game_id,))
+            row = c.fetchone()
+            return row
+        except Exception as exc:
+            last_exc = exc
+            schema.release_connection( conn, discard=_is_conn_error( exc ) )
+            conn = None
+            if _is_conn_error( exc ) and attempt == 0:
+                schema.reset_pg_pool()
+                continue
+            raise
+        finally:
+            if conn is not None:
+                schema.release_connection( conn )
+    raise last_exc
 
 
 def list_games(limit: int = 100, team_id: Optional[int] = None) -> List[Tuple[Any, ...]]:
     """Return list of games (newest first). If team_id given, only games owned by that team."""
-    conn = schema.get_conn()
-    c = conn.cursor()
-    if team_id is not None:
-        c.execute('''
-            SELECT g.id, g.試合日時, g.Season, g.Kind, t1.名前 AS 先攻, t2.名前 AS 後攻
-            FROM game g
-            JOIN team t1 ON g.先攻チーム_id = t1.id
-            JOIN team t2 ON g.後攻チーム_id = t2.id
-            WHERE g.owner_team_id = ?
-            ORDER BY g.id DESC
-            LIMIT ?
-        ''', (team_id, limit))
-    else:
-        c.execute('''
-            SELECT g.id, g.試合日時, g.Season, g.Kind, t1.名前 AS 先攻, t2.名前 AS 後攻
-            FROM game g
-            JOIN team t1 ON g.先攻チーム_id = t1.id
-            JOIN team t2 ON g.後攻チーム_id = t2.id
-            ORDER BY g.id DESC
-            LIMIT ?
-        ''', (limit,))
-    rows = c.fetchall()
-    conn.close()
-    return rows
+    last_exc = None
+    for attempt in range( 2 ):
+        conn = schema.get_conn()
+        try:
+            c = conn.cursor()
+            if team_id is not None:
+                c.execute('''
+                    SELECT g.id, g.試合日時, g.Season, g.Kind, t1.名前 AS 先攻, t2.名前 AS 後攻
+                    FROM game g
+                    JOIN team t1 ON g.先攻チーム_id = t1.id
+                    JOIN team t2 ON g.後攻チーム_id = t2.id
+                    WHERE g.owner_team_id = ?
+                    ORDER BY g.id DESC
+                    LIMIT ?
+                ''', (team_id, limit))
+            else:
+                c.execute('''
+                    SELECT g.id, g.試合日時, g.Season, g.Kind, t1.名前 AS 先攻, t2.名前 AS 後攻
+                    FROM game g
+                    JOIN team t1 ON g.先攻チーム_id = t1.id
+                    JOIN team t2 ON g.後攻チーム_id = t2.id
+                    ORDER BY g.id DESC
+                    LIMIT ?
+                ''', (limit,))
+            rows = c.fetchall()
+            return rows
+        except Exception as exc:
+            last_exc = exc
+            schema.release_connection( conn, discard=_is_conn_error( exc ) )
+            conn = None
+            if _is_conn_error( exc ) and attempt == 0:
+                schema.reset_pg_pool()
+                continue
+            raise
+        finally:
+            if conn is not None:
+                schema.release_connection( conn )
+    raise last_exc
 
 
 def _assert_owner(c: Any, game_id: int, owner_team_id: int) -> None:
@@ -226,21 +300,34 @@ def _assert_owner(c: Any, game_id: int, owner_team_id: int) -> None:
 
 def get_play_list(game_id: int, owner_team_id: Optional[int] = None) -> List[list]:
     """Return play data for the game. Raises PermissionError if owner_team_id is given and does not match."""
-    conn = schema.get_conn()
-    c = conn.cursor()
-    if owner_team_id is not None:
-        # ownership と play_data 取得を同一クエリで行う（TOCTOU 防止）
-        c.execute(
-            'SELECT * FROM play_data WHERE 試合_id = ? '
-            'AND 試合_id IN (SELECT id FROM game WHERE owner_team_id = ?) '
-            'ORDER BY プレイの番号',
-            (game_id, owner_team_id)
-        )
-    else:
-        c.execute('SELECT * FROM play_data WHERE 試合_id = ? ORDER BY プレイの番号', (game_id,))
-    rows = c.fetchall()
-    conn.close()
-    return [_db_row_to_list(r) for r in rows]
+    last_exc = None
+    for attempt in range( 2 ):
+        conn = schema.get_conn()
+        try:
+            c = conn.cursor()
+            if owner_team_id is not None:
+                c.execute(
+                    'SELECT * FROM play_data WHERE 試合_id = ? '
+                    'AND 試合_id IN (SELECT id FROM game WHERE owner_team_id = ?) '
+                    'ORDER BY プレイの番号',
+                    (game_id, owner_team_id)
+                )
+            else:
+                c.execute('SELECT * FROM play_data WHERE 試合_id = ? ORDER BY プレイの番号', (game_id,))
+            rows = c.fetchall()
+            return [_db_row_to_list(r) for r in rows]
+        except Exception as exc:
+            last_exc = exc
+            schema.release_connection( conn, discard=_is_conn_error( exc ) )
+            conn = None
+            if _is_conn_error( exc ) and attempt == 0:
+                schema.reset_pg_pool()
+                continue
+            raise
+        finally:
+            if conn is not None:
+                schema.release_connection( conn )
+    raise last_exc
 
 
 def insert_play(game_id: int, row_list: list, owner_team_id: Optional[int] = None) -> None:
@@ -267,7 +354,7 @@ def insert_play(game_id: int, row_list: list, owner_team_id: Optional[int] = Non
             discard = False
             if schema.is_postgres():
                 import psycopg2
-                if isinstance(e, (psycopg2.OperationalError, psycopg2.InterfaceError)):
+                if _is_conn_error( e ):
                     discard = True
             try:
                 conn.rollback()
@@ -275,7 +362,6 @@ def insert_play(game_id: int, row_list: list, owner_team_id: Optional[int] = Non
                 pass
             schema.release_connection(conn, discard=discard)
             if discard and attempt < max_attempts - 1:
-                # 接続プールをリセットして次のリトライで完全に新しい接続を使う
                 schema.reset_pg_pool()
                 time.sleep(0.3 * (2**attempt))
                 continue
@@ -310,25 +396,39 @@ def sync_missing_plays(
 
 def get_game_teams(game_id: int, owner_team_id: Optional[int] = None) -> Tuple[Optional[str], Optional[str]]:
     """Return (top_team_name, bottom_team_name) for the game. Returns (None, None) if ownership fails."""
-    conn = schema.get_conn()
-    c = conn.cursor()
-    if owner_team_id is not None:
-        c.execute('''
-            SELECT t1.名前, t2.名前 FROM game g
-            JOIN team t1 ON g.先攻チーム_id = t1.id
-            JOIN team t2 ON g.後攻チーム_id = t2.id
-            WHERE g.id = ? AND g.owner_team_id = ?
-        ''', (game_id, owner_team_id))
-    else:
-        c.execute('''
-            SELECT t1.名前, t2.名前 FROM game g
-            JOIN team t1 ON g.先攻チーム_id = t1.id
-            JOIN team t2 ON g.後攻チーム_id = t2.id
-            WHERE g.id = ?
-        ''', (game_id,))
-    row = c.fetchone()
-    conn.close()
-    return (row[0], row[1]) if row else (None, None)
+    last_exc = None
+    for attempt in range( 2 ):
+        conn = schema.get_conn()
+        try:
+            c = conn.cursor()
+            if owner_team_id is not None:
+                c.execute('''
+                    SELECT t1.名前, t2.名前 FROM game g
+                    JOIN team t1 ON g.先攻チーム_id = t1.id
+                    JOIN team t2 ON g.後攻チーム_id = t2.id
+                    WHERE g.id = ? AND g.owner_team_id = ?
+                ''', (game_id, owner_team_id))
+            else:
+                c.execute('''
+                    SELECT t1.名前, t2.名前 FROM game g
+                    JOIN team t1 ON g.先攻チーム_id = t1.id
+                    JOIN team t2 ON g.後攻チーム_id = t2.id
+                    WHERE g.id = ?
+                ''', (game_id,))
+            row = c.fetchone()
+            return (row[0], row[1]) if row else (None, None)
+        except Exception as exc:
+            last_exc = exc
+            schema.release_connection( conn, discard=_is_conn_error( exc ) )
+            conn = None
+            if _is_conn_error( exc ) and attempt == 0:
+                schema.reset_pg_pool()
+                continue
+            raise
+        finally:
+            if conn is not None:
+                schema.release_connection( conn )
+    raise last_exc
 
 
 def delete_last_play(game_id: int, owner_team_id: Optional[int] = None) -> None:
@@ -362,11 +462,7 @@ def delete_last_play(game_id: int, owner_team_id: Optional[int] = None) -> None:
                 )
             return
         except Exception as e:
-            discard = False
-            if schema.is_postgres():
-                import psycopg2
-                if isinstance(e, (psycopg2.OperationalError, psycopg2.InterfaceError)):
-                    discard = True
+            discard = _is_conn_error( e )
             try:
                 conn.rollback()
             except Exception:
@@ -393,18 +489,37 @@ def get_plays_df_for_game(game_id: int, owner_team_id: Optional[int] = None):
 
 def delete_game(game_id: int, owner_team_id: Optional[int] = None) -> None:
     """Delete a game and all its play_data rows. No-op if ownership fails."""
-    conn = schema.get_conn()
-    c = conn.cursor()
-    if owner_team_id is not None:
-        # play_data は owner_team_id で絞った game の分のみ削除
-        c.execute(
-            'DELETE FROM play_data WHERE 試合_id = ? '
-            'AND 試合_id IN (SELECT id FROM game WHERE owner_team_id = ?)',
-            (game_id, owner_team_id)
-        )
-        c.execute('DELETE FROM game WHERE id = ? AND owner_team_id = ?', (game_id, owner_team_id))
-    else:
-        c.execute('DELETE FROM play_data WHERE 試合_id = ?', (game_id,))
-        c.execute('DELETE FROM game WHERE id = ?', (game_id,))
-    conn.commit()
-    conn.close()
+    last_exc = None
+    for attempt in range( 2 ):
+        conn = schema.get_conn()
+        try:
+            c = conn.cursor()
+            if owner_team_id is not None:
+                c.execute(
+                    'DELETE FROM play_data WHERE 試合_id = ? '
+                    'AND 試合_id IN (SELECT id FROM game WHERE owner_team_id = ?)',
+                    (game_id, owner_team_id)
+                )
+                c.execute('DELETE FROM game WHERE id = ? AND owner_team_id = ?', (game_id, owner_team_id))
+            else:
+                c.execute('DELETE FROM play_data WHERE 試合_id = ?', (game_id,))
+                c.execute('DELETE FROM game WHERE id = ?', (game_id,))
+            conn.commit()
+            schema.release_connection( conn )
+            return
+        except Exception as exc:
+            last_exc = exc
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            schema.release_connection( conn, discard=_is_conn_error( exc ) )
+            conn = None
+            if _is_conn_error( exc ) and attempt == 0:
+                schema.reset_pg_pool()
+                continue
+            raise
+        finally:
+            if conn is not None:
+                schema.release_connection( conn )
+    raise last_exc

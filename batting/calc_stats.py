@@ -141,9 +141,9 @@ def calc_batting_stats(
         '平均投球数'       : _r( n_pitch,   n_plate,  pct=False ),
         '2S以降平均投球数' : _r( n_2sPitch, n_2sPlate, pct=False ),
         'スイング率'   : _r( n_swing,        n_pitch  ),
-        'ゾーン外SW%'  : _r( n_outZoneSwing, n_outZone ),
-        '空振り率'     : _r( n_whiff,        n_swing  ),
-        '1stSW率'      : _r( n_1stSwing,     n_plate  ),
+        'ゾーン外スイング率'             : _r( n_outZoneSwing, n_outZone ),
+        '空振り率'                     : _r( n_whiff,        n_swing  ),
+        '1stストライクスイング率' : _r( n_1stSwing,     n_plate  ),
         'ゴロ率'       : _r( n_groundBall, n_batted ),
         'フライ率'     : _r( n_flyBall,    n_batted ),
     }
