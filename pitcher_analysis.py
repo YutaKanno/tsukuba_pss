@@ -49,7 +49,7 @@ def _add_analysis_cols( df: pd.DataFrame ) -> pd.DataFrame:
     return df
 
 
-@st.cache_data( ttl = 600 )
+@st.cache_data
 def _load_plays_df( team_id: int ) -> pd.DataFrame:
     df = game_repo.get_all_plays_df( team_id )
     if df.empty:
@@ -157,7 +157,13 @@ def _go_start():
 
 
 def show():
-    st.button( '← スタートに戻る', on_click = _go_start )
+    col_back, col_reload = st.columns( [ 6, 1 ] )
+    with col_back:
+        st.button( '← スタートに戻る', on_click = _go_start )
+    with col_reload:
+        if st.button( 'データを更新', key='pa_reload' ):
+            _load_plays_df.clear()
+            st.rerun()
     st.header( '投手分析' )
 
     team_id = st.session_state.get( 'logged_in_team_id' )

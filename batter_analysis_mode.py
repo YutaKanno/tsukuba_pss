@@ -1186,7 +1186,13 @@ def _go_start():
 
 
 def show() -> None:
-    st.button( '← スタートに戻る', on_click=_go_start )
+    col_back, col_reload = st.columns( [ 6, 1 ] )
+    with col_back:
+        st.button( '← スタートに戻る', on_click=_go_start )
+    with col_reload:
+        if st.button( 'データを更新', key='bam_reload' ):
+            _load_plays_df.clear()
+            st.rerun()
 
     team_id = st.session_state.get( 'logged_in_team_id' )
     df = _load_plays_df( team_id )
