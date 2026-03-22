@@ -356,6 +356,56 @@ def migrate_add_comment_table() -> None:
         conn.close()
 
 
+def migrate_add_batter_comment_table() -> None:
+    """Create batter_comment table if it doesn't exist (SQLite & PostgreSQL)."""
+    conn = get_conn()
+    c = conn.cursor()
+    try:
+        if is_postgres():
+            c.execute('''
+                CREATE TABLE IF NOT EXISTS batter_comment (
+                    id SERIAL PRIMARY KEY,
+                    team_id INTEGER NOT NULL REFERENCES team(id),
+                    batter_name TEXT NOT NULL,
+                    comment TEXT NOT NULL DEFAULT '',
+                    UNIQUE(team_id, batter_name)
+                )
+            ''')
+        else:
+            c.execute('''
+                CREATE TABLE IF NOT EXISTS batter_comment (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    team_id INTEGER NOT NULL REFERENCES team(id),
+                    batter_name TEXT NOT NULL,
+                    comment TEXT NOT NULL DEFAULT '',
+                    UNIQUE(team_id, batter_name)
+                )
+            ''')
+        conn.commit()
+    except Exception:
+        pass
+    finally:
+        conn.close()
+
+
+def migrate_add_indexes() -> None:
+    """Add performance indexes on play_data and game tables (SQLite & PostgreSQL)."""
+    conn = get_conn()
+    c = conn.cursor()
+    try:
+        if is_postgres():
+            c.execute('CREATE INDEX IF NOT EXISTS idx_play_data_game_id ON play_data ("試合_id")')
+            c.execute('CREATE INDEX IF NOT EXISTS idx_game_owner_team_id ON game (owner_team_id)')
+        else:
+            c.execute('CREATE INDEX IF NOT EXISTS idx_play_data_game_id ON play_data (試合_id)')
+            c.execute('CREATE INDEX IF NOT EXISTS idx_game_owner_team_id ON game (owner_team_id)')
+        conn.commit()
+    except Exception:
+        pass
+    finally:
+        release_connection(conn)
+
+
 def init_db() -> None:
     """Create all tables if they do not exist (SQLite only). For PostgreSQL, run db/supabase_schema.sql once in Supabase."""
     if is_postgres():

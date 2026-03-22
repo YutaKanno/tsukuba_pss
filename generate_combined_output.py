@@ -167,10 +167,8 @@ def generate_combined_pdf(
 
     # 3. プレイヤー分析（選択打者 × 3ページ）
     if selected_batters:
-        comments = {
-            b: batter_comment_repo.get_comment( team_id, b )
-            for b in selected_batters
-        }
+        _all_comments = batter_comment_repo.get_all_comments( team_id )
+        comments = { b: _all_comments.get( b, '' ) for b in selected_batters }
         pdfs.append(
             _generate_player_pdf(
                 selected_batters, df_team, df_team_all,

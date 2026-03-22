@@ -49,7 +49,7 @@ def _add_analysis_cols( df: pd.DataFrame ) -> pd.DataFrame:
     return df
 
 
-@st.cache_data( ttl = 60 )
+@st.cache_data( ttl = 600 )
 def _load_plays_df( team_id: int ) -> pd.DataFrame:
     df = game_repo.get_all_plays_df( team_id )
     if df.empty:

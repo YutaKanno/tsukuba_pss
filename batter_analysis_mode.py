@@ -1360,6 +1360,9 @@ def show() -> None:
                 batter_tabs    = all_tabs[ :-1 ]
                 tab_pdf        = all_tabs[ -1 ]
 
+                # コメントを一括取得（N+1クエリ防止）
+                _cached_comments = batter_comment_repo.get_all_comments( team_id )
+
                 for tab_b, batter in zip( batter_tabs, selected_batters ):
                     with tab_b:
                         df_b = df_team[ df_team[ '打者氏名' ] == batter ]
@@ -1368,7 +1371,7 @@ def show() -> None:
                         _ck_edit = f'ba_comment_editing_{batter}'
                         if _ck_edit not in st.session_state:
                             st.session_state[ _ck_edit ] = False
-                        saved_comment = batter_comment_repo.get_comment( team_id, batter )
+                        saved_comment = _cached_comments.get( batter, '' )
                         if st.session_state[ _ck_edit ]:
                             new_text = st.text_area(
                                 'コメント', value=saved_comment,
@@ -1379,6 +1382,7 @@ def show() -> None:
                                 if st.button( '保存', key=f'ba_comment_save_{batter}' ):
                                     batter_comment_repo.upsert_comment( team_id, batter, new_text )
                                     st.session_state[ _ck_edit ] = False
+                                    _cached_comments[ batter ] = new_text
                                     st.rerun()
                             with c_cancel:
                                 if st.button( 'キャンセル', key=f'ba_comment_cancel_{batter}' ):
@@ -1434,10 +1438,8 @@ def show() -> None:
                 with tab_pdf:
                     st.markdown( '**PDF（選択選手全員）**' )
                     if st.button( 'PDF 生成', key='bam_player_gen_pdf' ):
-                        _comments = {
-                            b: batter_comment_repo.get_comment( team_id, b )
-                            for b in selected_batters
-                        }
+                        _all_comments = batter_comment_repo.get_all_comments( team_id )
+                        _comments = { b: _all_comments.get( b, '' ) for b in selected_batters }
                         with st.spinner( 'PDF 生成中...' ):
                             _pdf = _generate_player_pdf(
                                 selected_batters, df_team, df_team_all,

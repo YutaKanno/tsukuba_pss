@@ -23,6 +23,23 @@ def get_comment( team_id: int, batter_name: str ) -> str:
         return ''
 
 
+def get_all_comments( team_id: int ) -> dict:
+    """Return all batter comments for team_id as {batter_name: comment}."""
+    try:
+        conn = get_conn()
+        c    = conn.cursor()
+        c.execute(
+            'SELECT batter_name, comment FROM batter_comment WHERE team_id = ?',
+            ( team_id, ),
+        )
+        rows = c.fetchall()
+        conn.close()
+        return { r[0]: r[1] for r in rows }
+    except Exception:
+        _ensure_table()
+        return {}
+
+
 def upsert_comment( team_id: int, batter_name: str, comment: str ) -> None:
     _ensure_table()
     conn = get_conn()
