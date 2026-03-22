@@ -144,8 +144,6 @@ def calc_batting_stats(
         'ゾーン外SW%'  : _r( n_outZoneSwing, n_outZone ),
         '空振り率'     : _r( n_whiff,        n_swing  ),
         '1stSW率'      : _r( n_1stSwing,     n_plate  ),
-        'ゴロ率'       : _r( n_groundBall,   n_batted ),
-        'フライ率'     : _r( n_flyBall,      n_batted ),
-        'ライナー率'   : _r( n_lineDrive,    n_batted ),
-        '内野フライ率' : _r( n_inFieldFly,   n_batted ),
+        'ゴロ率'       : _r( n_groundBall, n_batted ),
+        'フライ率'     : _r( n_flyBall,    n_batted ),
     }
