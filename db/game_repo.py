@@ -332,24 +332,51 @@ def get_game_teams(game_id: int, owner_team_id: Optional[int] = None) -> Tuple[O
 
 
 def delete_last_play(game_id: int, owner_team_id: Optional[int] = None) -> None:
-    """Delete the last play of the given game. No-op if ownership fails."""
-    conn = schema.get_conn()
-    c = conn.cursor()
-    if owner_team_id is not None:
-        # 所有権チェックを WHERE 句に含める（アトミック）
-        c.execute(
-            'DELETE FROM play_data WHERE 試合_id = ? '
-            'AND 試合_id IN (SELECT id FROM game WHERE owner_team_id = ?) '
-            'AND id = (SELECT MAX(id) FROM play_data WHERE 試合_id = ?)',
-            (game_id, owner_team_id, game_id)
-        )
-    else:
-        c.execute(
-            'DELETE FROM play_data WHERE 試合_id = ? AND id = (SELECT MAX(id) FROM play_data WHERE 試合_id = ?)',
-            (game_id, game_id)
-        )
-    conn.commit()
-    conn.close()
+    """Delete the last play of the given game.
+
+    対象行が無い（所有権不一致・DB未同期など）のときは RuntimeError を送出する。
+    """
+    max_attempts = 3 if schema.is_postgres() else 1
+    for attempt in range(max_attempts):
+        conn = schema.get_conn()
+        try:
+            c = conn.cursor()
+            if owner_team_id is not None:
+                c.execute(
+                    'DELETE FROM play_data WHERE 試合_id = ? '
+                    'AND 試合_id IN (SELECT id FROM game WHERE owner_team_id = ?) '
+                    'AND id = (SELECT MAX(id) FROM play_data WHERE 試合_id = ?)',
+                    (game_id, owner_team_id, game_id)
+                )
+            else:
+                c.execute(
+                    'DELETE FROM play_data WHERE 試合_id = ? AND id = (SELECT MAX(id) FROM play_data WHERE 試合_id = ?)',
+                    (game_id, game_id)
+                )
+            rc = c.rowcount
+            conn.commit()
+            schema.release_connection(conn, discard=False)
+            if not rc:
+                raise RuntimeError(
+                    'DB上に削除対象のプレイがありません（所有権・同期ずれの可能性があります）。'
+                )
+            return
+        except Exception as e:
+            discard = False
+            if schema.is_postgres():
+                import psycopg2
+                if isinstance(e, (psycopg2.OperationalError, psycopg2.InterfaceError)):
+                    discard = True
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            schema.release_connection(conn, discard=discard)
+            if discard and attempt < max_attempts - 1:
+                schema.reset_pg_pool()
+                time.sleep(0.3 * (2**attempt))
+                continue
+            raise
 
 
 def get_plays_df_for_game(game_id: int, owner_team_id: Optional[int] = None):

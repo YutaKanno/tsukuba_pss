@@ -1,4 +1,5 @@
 """試合メイン画面: データ入力・成績表示・データ一覧。"""
+import copy
 import io
 from datetime import datetime
 
@@ -452,7 +453,12 @@ def main_page(list):
         # DB保存エラー・イニング同期結果をrerun後も表示（session_stateから読む）
         if '_db_insert_error' in st.session_state:
             _err_msg = st.session_state.pop('_db_insert_error')
-            st.error(f"⚠️ DB保存に一時的に失敗しました。データはローカルに保持されており、イニング終了時に自動再送されます。通信状況を確認してください。\n\n詳細: {_err_msg}")
+            st.error(
+                "⚠️ 直前のプレイのDB保存に失敗しました。このプレイは端末上の一覧に残してあり、"
+                "このタブの表示時やイニング終了時に自動で再送信を試みます（通信が戻れば反映されます）。"
+                "解消しない場合は「確定」を再度押すか、運営に連絡してください。\n\n"
+                f"詳細: {_err_msg}"
+            )
         if '_inning_sync_result' in st.session_state:
             _n = st.session_state.pop('_inning_sync_result')
             st.warning(f"⚠️ {_n} 件の未登録データをDBに補完しました")
@@ -1394,9 +1400,7 @@ def main_page(list):
                                             owner_team_id=_st.session_state.get("logged_in_team_id"),
                                         )
                                     except Exception as e:
-                                        # DB保存失敗 → st.stop() は呼ばない。
-                                        # all_list への追加・data_list の更新は続行し、
-                                        # イニング終了時 / タブ表示時の sync_missing_plays に自動再送を任せる。
+                                        # メモリには載せて続行し、タブ表示・イニング終了時の sync_missing_plays で再送
                                         st.session_state['_db_insert_error'] = str(e)
 
                                 st.session_state['last_confirmed_play_key'] = play_key
@@ -1587,6 +1591,12 @@ def main_page(list):
                 )
 
     with tab2:
+        if '_db_delete_error' in st.session_state:
+            _del_msg = st.session_state.pop('_db_delete_error')
+            st.error(
+                "⚠️ DBから最終プレイの削除に失敗しました。メモリ上の一覧は変更していません。通信を確認して再度お試しください。\n\n"
+                f"詳細: {_del_msg}"
+            )
         # ── ⏱ 試合開始時刻（最重要） ──
         st.markdown( "### ⏱ 試合開始時刻" )
         _開始時刻 = st.session_state.get( '開始時刻', '' )
@@ -1620,66 +1630,79 @@ def main_page(list):
                             gid,
                             owner_team_id=_st.session_state.get("logged_in_team_id"),
                         )
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        st.session_state['_db_delete_error'] = str(e)
+                        st.error(
+                            "⚠️ DBからの削除に失敗しました。一覧は変更していません。\n\n"
+                            f"詳細: {e}"
+                        )
+                        st.stop()
+
                 last_entry = st.session_state[ 'all_list' ].pop()
                 if 'cached_all_list_len' in st.session_state:
                     st.session_state['cached_all_list_len'] = -1
 
-                表裏 = last_entry[11] 
-                回 = last_entry[12]  
-                打者状況 = last_entry[13]
-                一走状況 = last_entry[14]
-                二走状況 = last_entry[15]
-                三走状況 = last_entry[16]
-                打撃結果 = last_entry[17]
-                エラー選手 = last_entry[21]  
+                # 列順は inputed_list / update_list と一致（0始まり）
+                表裏 = last_entry[11]
+                回 = last_entry[10]
+                打者状況 = last_entry[39]
+                一走状況 = last_entry[36]
+                二走状況 = last_entry[37]
+                三走状況 = last_entry[38]
+                打撃結果 = last_entry[45]
+                エラー選手 = last_entry[55]
 
-
-                # 得点計算と減算処理
+                # 得点計算と減算処理（確定時の加算の逆）
                 scoring_runners = [打者状況, 一走状況, 二走状況, 三走状況]
                 得点 = scoring_runners.count('本進')
 
                 if 表裏 == '表':
-                    先攻得点 += 得点
+                    先攻得点 -= 得点
 
-                    if top_score[回 - 1] == '':
-                        if 得点 > 0:
-                            top_score[回 - 1] = 得点
-                    else:
-                        top_score[回 - 1] += 得点
+                    if 得点 > 0:
+                        cur = top_score[回 - 1]
+                        if cur != '' and cur is not None:
+                            newv = int(cur) - 得点
+                            top_score[回 - 1] = '' if newv <= 0 else newv
 
                     if 打撃結果 in ['単打', '二塁打', '三塁打', '本塁打']:
-                        top_score[12] += 1
+                        top_score[12] -= 1
                     if エラー選手 not in [0, '0']:
-                        bottom_score[13] += 1
+                        bottom_score[13] -= 1
                     if 打撃結果 in ['見逃し三振', '空振り三振', '振り逃げ', 'K3']:
-                        top_score[14] += 1
+                        top_score[14] -= 1
                     if 打撃結果 == '四球':
-                        top_score[15] += 1
+                        top_score[15] -= 1
 
                 else:
-                    後攻得点 += 得点
+                    後攻得点 -= 得点
 
-                    if bottom_score[回 - 1] == '':
-                        if 得点 > 0:
-                            bottom_score[回 - 1] = 得点
-                    else:
-                        bottom_score[回 - 1] += 得点
+                    if 得点 > 0:
+                        cur = bottom_score[回 - 1]
+                        if cur != '' and cur is not None:
+                            newv = int(cur) - 得点
+                            bottom_score[回 - 1] = '' if newv <= 0 else newv
 
                     if 打撃結果 in ['単打', '二塁打', '三塁打', '本塁打']:
-                        bottom_score[12] += 1
+                        bottom_score[12] -= 1
                     if エラー選手 not in [0, '0']:
-                        top_score[13] += 1
+                        top_score[13] -= 1
                     if 打撃結果 in ['見逃し三振', '空振り三振', '振り逃げ', 'K3']:
-                        bottom_score[14] += 1
+                        bottom_score[14] -= 1
                     if 打撃結果 == '四球':
-                        bottom_score[15] += 1
+                        bottom_score[15] -= 1
 
-
-                # 一覧を再更新
+                # 一覧を再更新（全削除時はテンプレ list にスコアを反映してから）
+                if st.session_state['all_list']:
+                    _base_row = st.session_state['all_list'][-1]
+                else:
+                    _base_row = copy.deepcopy(list)
+                    _base_row[12] = 先攻得点
+                    _base_row[13] = 後攻得点
+                    _base_row[86] = copy.deepcopy(top_score)
+                    _base_row[87] = copy.deepcopy(bottom_score)
                 updated_list = update_list(
-                    st.session_state[ 'all_list' ][-1],
+                    _base_row,
                     top_poses, top_names, top_nums, top_lrs,
                     bottom_poses, bottom_names, bottom_nums, bottom_lrs,
                     top_score,
@@ -1687,7 +1710,7 @@ def main_page(list):
                 )
 
                 # 状態更新
-                st.session_state[ 'data_list' ] = updated_list
+                st.session_state['data_list'] = updated_list
                 st.session_state.reset_flag = True
                 st.session_state.pop('_prev_batting_result', None)
                 st.session_state.pop('_prev_batting_result2', None)
@@ -1841,7 +1864,7 @@ def main_page(list):
             'reset_flag', 'radio_selection', 'pickoff_selection',
             '_game_end_sync_done', '_game_end_sync_result',
             '_inning_sync_result', '_inning_sync_error',
-            '_db_insert_error', '_pos_warning', '_just_did_substitution',
+            '_db_insert_error', '_db_delete_error', '_pos_warning', '_just_did_substitution',
         ]
 
         if not st.session_state.get( '_game_end_sync_done' ):
