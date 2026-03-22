@@ -50,12 +50,12 @@ def plot_battingStatsTable( df: pd.DataFrame ) -> plt.Figure:
     for col in _RATE3_COLS:
         if col in df_disp.columns:
             df_disp[ col ] = df_disp[ col ].apply(
-                lambda v: f'{ v:.3f }'[ 1: ] if isinstance( v, float ) and not pd.isna( v ) else v
+                lambda v: f'{v:.3f}'[ 1: ] if isinstance( v, float ) and not pd.isna( v ) else v
             )
     for col in _PCT_COLS:
         if col in df_disp.columns:
             df_disp[ col ] = df_disp[ col ].apply(
-                lambda v: f'{ int( round( v ) ) }%' if isinstance( v, ( int, float ) ) and not pd.isna( v ) else v
+                lambda v: f'{int( round( v ) )}%' if isinstance( v, ( int, float ) ) and not pd.isna( v ) else v
             )
     df_disp = df_disp.where( df_disp.notna(), other = '' ).astype( object )
 
