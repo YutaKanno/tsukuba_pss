@@ -181,14 +181,25 @@ def _score_df( df: pd.DataFrame, top_team: str, bot_team: str,
     top_stats = _side_stats( df, '表' )
     bot_stats = _side_stats( df, '裏' )
 
+    # 表のみで終了したイニング（後攻が未消化）を検出
+    unplayed_bot: set = set()
+    for inn in innings:
+        top_exists = not df[ ( df[ '表裏' ] == '表' ) & ( df[ '回' ] == inn ) ].empty
+        bot_exists = not df[ ( df[ '表裏' ] == '裏' ) & ( df[ '回' ] == inn ) ].empty
+        if top_exists and not bot_exists:
+            unplayed_bot.add( inn )
+
     records = []
-    for label, runs_dict, total, stats in [
-        ( f'{ top_team }（先攻）', top_runs, top_total, top_stats ),
-        ( f'{ bot_team }（後攻）', bot_runs, bot_total, bot_stats ),
+    for label, runs_dict, total, stats, is_bot in [
+        ( f'{ top_team }（先攻）', top_runs, top_total, top_stats, False ),
+        ( f'{ bot_team }（後攻）', bot_runs, bot_total, bot_stats, True  ),
     ]:
         row: dict = { 'チーム': label }
         for inn in innings:
-            row[ str( inn ) ] = runs_dict.get( inn, '' )
+            if is_bot and inn in unplayed_bot:
+                row[ str( inn ) ] = '×'
+            else:
+                row[ str( inn ) ] = runs_dict.get( inn, '' )
         row[ '計' ] = total
         row[ 'H'  ] = stats[ 'H' ]
         row[ 'E'  ] = stats[ 'E' ]
@@ -264,6 +275,13 @@ def _scorebook_df( df: pd.DataFrame, side: str, innings: list ) -> pd.DataFrame:
         for name  in order_players_seq[ order ]
     ]
 
+    # 各打順の最初に出場した選手 = スタメン
+    starter_keys = {
+        ( order, order_players_seq[ order ][ 0 ] )
+        for order in order_players_seq
+        if order_players_seq[ order ]
+    }
+
     records = []
     for order, name in entry_keys:
         # この選手の完了打席
@@ -279,6 +297,9 @@ def _scorebook_df( df: pd.DataFrame, side: str, innings: list ) -> pd.DataFrame:
             if pos and ( not positions or positions[ -1 ] != pos ):
                 positions.append( pos )
         pos_display = ''.join( positions ) if positions else ''
+        # スタメンの場合、最初の守備位置数字を丸数字で表示
+        if ( order, name ) in starter_keys and pos_display:
+            pos_display = _POS_CIRCLES.get( pos_display[ 0 ], pos_display[ 0 ] ) + pos_display[ 1: ]
 
         # 打席左右（最初の非 null 値を使用）
         lr_series = player_ab[ '打席左右' ].dropna()
@@ -323,6 +344,7 @@ def _scorebook_df( df: pd.DataFrame, side: str, innings: list ) -> pd.DataFrame:
                 parts.append( result )
 
             row_data[ str( inn ) ] = ' / '.join( parts )
+        row_data[ '_is_sub' ] = ( order, name ) not in starter_keys
         records.append( row_data )
 
     return pd.DataFrame( records ).set_index( '打順' )
@@ -417,6 +439,9 @@ _PC_ROW_ODD  = '#F8FAFC'   # 奇数データ行
 _PC_ROW_EVEN = '#FFFFFF'   # 偶数データ行
 _PC_EDGE     = '#CBD5E1'   # 罫線
 _PC_ACCENT   = '#3B82F6'   # セクションタイトルアクセント
+
+# スタメン守備位置の丸数字マッピング（1〜9）
+_POS_CIRCLES = { str( i ): c for i, c in enumerate( '①②③④⑤⑥⑦⑧⑨', 1 ) }
 
 
 def _draw_table_on_ax(
@@ -534,6 +559,9 @@ def generate_score_card_pdf(
     score_data = _score_df( df, top_team, bot_team, innings )
     top_sb     = _scorebook_df( df, '表', innings )
     bot_sb     = _scorebook_df( df, '裏', innings )
+
+    top_sb = top_sb.drop( columns = [ '_is_sub' ], errors = 'ignore' )
+    bot_sb = bot_sb.drop( columns = [ '_is_sub' ], errors = 'ignore' )
     p_top      = _pitcher_df( df, '裏' )
     p_bot      = _pitcher_df( df, '表' )
 

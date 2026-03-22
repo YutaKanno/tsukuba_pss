@@ -26,36 +26,29 @@ def _register_fonts():
 _register_fonts()
 
 
-# ── 構え値 → カテゴリ ───────────────────────────────────────────
-def _aim_category( val ) -> str:
-    if pd.isna( val ):
-        return 'unknown'
-    v = int( val )
-    if v <= 10:
-        return 'high'
-    if v in ( 11, 12, 16, 17, 21, 22 ):
-        return '3rd'
-    if v in ( 13, 18, 23 ):
-        return 'mid'
-    if v in ( 14, 15, 19, 20, 24, 25 ):
-        return '1st'
-    return 'unknown'
-
-
-_AIM_COLOR = {
-    '3rd':     '#3498DB',
-    'mid':     '#27AE60',
-    '1st':     '#E74C3C',
-    'high':    '#F39C12',
-    'unknown': '#AAAAAA',
+# ── 打球タイプ → 色 ─────────────────────────────────────────────
+_BATTYPE_COLOR = {
+    'ゴロ':    '#E67E22',
+    'フライ':  '#2980B9',
+    'ライナー': '#27AE60',
+    'other':   '#AAAAAA',
 }
 
-_AIM_LABEL = {
-    '3rd':  '3塁側',
-    'mid':  '真ん中',
-    '1st':  '1塁側',
-    'high': '高め',
+_BATTYPE_LABEL = {
+    'ゴロ':    'ゴロ',
+    'フライ':  'フライ',
+    'ライナー': 'ライナー',
+    'other':   'その他',
 }
+
+
+def _battype_category( val ) -> str:
+    if pd.isna( val ) or str( val ) == '0' or str( val ) == '':
+        return 'other'
+    v = str( val )
+    if v in _BATTYPE_COLOR:
+        return v
+    return 'other'
 
 # ── 打撃結果 → (marker, filled) ────────────────────────────────
 _RESULT_STYLE = {
@@ -107,7 +100,8 @@ def course_detailPlot(
         return None
 
     df_p = df_p.copy()
-    df_p[ '_aim_cat' ] = df_p[ '構え' ].apply( _aim_category )
+    df_p[ '_bat_cat' ] = df_p[ '打球タイプ' ].apply( _battype_category ) \
+        if '打球タイプ' in df_p.columns else 'other'
 
     # figsize は course_distPlot と同じ
     fig, ax = plt.subplots( figsize = ( 2.5, 2.5 ) )
@@ -140,13 +134,13 @@ def course_detailPlot(
 
     # ── 散布 ──────────────────────────────────────────────────
     for _, row in df_p.iterrows():
-        x   = row[ 'コースX' ]
-        y   = row[ 'コースYadj' ]
-        aim = row[ '_aim_cat' ]
-        res = str( row.get( '打撃結果', '' ) )
+        x      = row[ 'コースX' ]
+        y      = row[ 'コースYadj' ]
+        bat    = row[ '_bat_cat' ] if '_bat_cat' in row else 'other'
+        res    = str( row.get( '打撃結果', '' ) )
 
-        color              = _AIM_COLOR.get( aim, '#AAAAAA' )
-        marker, filled     = _RESULT_STYLE.get( res, _DEFAULT_STYLE )
+        color          = _BATTYPE_COLOR.get( bat, '#AAAAAA' )
+        marker, filled = _RESULT_STYLE.get( res, _DEFAULT_STYLE )
 
         kw = dict( marker = marker, s = 12, linewidths = 0.7, zorder = 3 )
         if marker == 'x':
@@ -157,16 +151,16 @@ def course_detailPlot(
             ax.scatter( x, y, facecolors = 'none', edgecolors = color, **kw )
 
     # ── 凡例（コンパクト） ────────────────────────────────────
-    aim_handles = [
+    bat_handles = [
         Line2D( [ 0 ], [ 0 ], marker = 'o', color = 'none',
                 markerfacecolor = c, markeredgecolor = c,
-                markersize = 4, label = _AIM_LABEL[ k ] )
-        for k, c in _AIM_COLOR.items() if k != 'unknown'
+                markersize = 4, label = _BATTYPE_LABEL[ k ] )
+        for k, c in _BATTYPE_COLOR.items() if k != 'other'
     ]
     marker_handles = [
         Line2D( [ 0 ], [ 0 ],
                 marker          = mk,
-                color           = 'none' if mk == 'x' else 'none',
+                color           = 'none',
                 markerfacecolor = '#555555' if filled else 'none',
                 markeredgecolor = '#555555',
                 markeredgewidth = 0.8,
@@ -176,27 +170,27 @@ def course_detailPlot(
     ]
 
     leg1 = ax.legend(
-        handles   = aim_handles,
-        loc       = 'upper left',
-        fontsize  = 4.5,
-        framealpha = 0.7,
-        handlelength = 0.8,
+        handles       = bat_handles,
+        loc           = 'upper left',
+        fontsize      = 4.5,
+        framealpha    = 0.7,
+        handlelength  = 0.8,
         handletextpad = 0.3,
-        borderpad  = 0.4,
-        labelspacing = 0.2,
-        title      = '構え',
+        borderpad     = 0.4,
+        labelspacing  = 0.2,
+        title         = '打球タイプ',
         title_fontsize = 4.5,
     )
     ax.add_artist( leg1 )
     ax.legend(
-        handles   = marker_handles,
-        loc       = 'lower left',
-        fontsize  = 4.5,
-        framealpha = 0.7,
-        handlelength = 0.8,
+        handles       = marker_handles,
+        loc           = 'lower left',
+        fontsize      = 4.5,
+        framealpha    = 0.7,
+        handlelength  = 0.8,
         handletextpad = 0.3,
-        borderpad  = 0.4,
-        labelspacing = 0.2,
+        borderpad     = 0.4,
+        labelspacing  = 0.2,
     )
 
     buf = io.BytesIO()
