@@ -29,8 +29,11 @@ _HEADER_COLOR = '#1A3A5C'
 # vline を入れる列（その列の右辺）
 _VLINE_AFTER = { 'index', '打数', '打点', 'OPS', 'BB%', 'ライナー率' }
 
-# .333 形式でフォーマットする列
-_RATE3_COLS = { '打率', '出塁率', '長打率', 'OPS' }
+# .333 形式（先頭の0を除く）でフォーマットする列
+_RATE3_COLS = { '打率', '出塁率', '長打率' }
+
+# 1を超えうる小数3桁列（先頭を削らない）
+_RATE3_FULL_COLS = { 'OPS' }
 
 # round0 + % 表示する列
 _PCT_COLS = {
@@ -51,6 +54,11 @@ def plot_battingStatsTable( df: pd.DataFrame ) -> plt.Figure:
         if col in df_disp.columns:
             df_disp[ col ] = df_disp[ col ].apply(
                 lambda v: f'{v:.3f}'[ 1: ] if isinstance( v, float ) and not pd.isna( v ) else v
+            )
+    for col in _RATE3_FULL_COLS:
+        if col in df_disp.columns:
+            df_disp[ col ] = df_disp[ col ].apply(
+                lambda v: f'{v:.3f}' if isinstance( v, float ) and not pd.isna( v ) else v
             )
     for col in _PCT_COLS:
         if col in df_disp.columns:
