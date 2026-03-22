@@ -27,7 +27,7 @@ _register_fonts()
 _HEADER_COLOR = '#1A3A5C'
 
 # vline を入れる列（その列の右辺）
-_VLINE_AFTER = { 'index', '打数', '打点', 'OPS', 'BB%', 'ライナー率' }
+_VLINE_AFTER = { 'index', '打数', '打点', 'OPS', 'BB%', '2S以降平均投球数', 'ライナー率' }
 
 # .333 形式（先頭の0を除く）でフォーマットする列
 _RATE3_COLS = { '打率', '出塁率', '長打率' }

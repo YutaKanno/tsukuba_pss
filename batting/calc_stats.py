@@ -138,6 +138,8 @@ def calc_batting_stats(
         'K%'           : _r( n_k,           n_plate ),
         'BB%'          : _r( n_bb_total,    n_plate ),
         '犠打数'       : n_sacBunt,
+        '平均投球数'       : _r( n_pitch,   n_plate,  pct=False ),
+        '2S以降平均投球数' : _r( n_2sPitch, n_2sPlate, pct=False ),
         'スイング率'   : _r( n_swing,        n_pitch  ),
         'ゾーン外SW%'  : _r( n_outZoneSwing, n_outZone ),
         '空振り率'     : _r( n_whiff,        n_swing  ),
