@@ -427,6 +427,15 @@ def main_page(list):
         st.rerun()
 
     tab2, tab1, tab_sb, tab3 = st.tabs(['メニュー', 'データ入力', 'スコアブック', 'データ一覧'])
+    _sync_fb = st.session_state.pop('_manual_sync_feedback', None)
+    if _sync_fb is not None:
+        if _sync_fb.get('ok'):
+            if _sync_fb.get('n', 0) > 0:
+                st.success(f"DB同期: {_sync_fb['n']} 件のプレイを送信しました。")
+            else:
+                st.info("DB同期: 未送信のプレイはありません（メモリとDBは一致しています）。")
+        else:
+            st.error(f"DB同期に失敗しました: {_sync_fb.get('err', '不明')}")
     with tab3:
         _display_rows = 150
         df_display = dataframe.tail(_display_rows).astype(str) if len(dataframe) > _display_rows else dataframe.astype(str)
@@ -435,36 +444,15 @@ def main_page(list):
 
         
     with tab1:
-        # メモリと DB の差分を先に補完（イニング外の欠損もここで回復）
-        _gid_bg = st.session_state.get('current_game_id')
-        _mem_bg = st.session_state.get('all_list') or []
-        if _gid_bg and _mem_bg:
-            try:
-                from db import game_repo as _gr_bg
-                _n_bg = _gr_bg.sync_missing_plays(
-                    _gid_bg,
-                    _mem_bg,
-                    st.session_state.get('logged_in_team_id'),
-                )
-                if _n_bg:
-                    st.session_state['_inning_sync_result'] = _n_bg
-            except Exception as _e_bg:
-                st.session_state['_inning_sync_error'] = str(_e_bg)
-        # DB保存エラー・イニング同期結果をrerun後も表示（session_stateから読む）
+        # DB保存エラーなど（自動同期は行わずメニューの「DBに同期」で送信）
         if '_db_insert_error' in st.session_state:
             _err_msg = st.session_state.pop('_db_insert_error')
             st.error(
-                "⚠️ 直前のプレイのDB保存に失敗しました。このプレイは端末上の一覧に残してあり、"
-                "このタブの表示時やイニング終了時に自動で再送信を試みます（通信が戻れば反映されます）。"
-                "解消しない場合は「確定」を再度押すか、運営に連絡してください。\n\n"
+                "⚠️ 直前のプレイのDB保存に失敗しました。データはこの端末の一覧に残っています。"
+                "メニュータブの「DBに同期（未送信プレイを送信）」を押すと再送信します。"
+                "（入力終了時にもまとめて送信します。）\n\n"
                 f"詳細: {_err_msg}"
             )
-        if '_inning_sync_result' in st.session_state:
-            _n = st.session_state.pop('_inning_sync_result')
-            st.warning(f"⚠️ {_n} 件の未登録データをDBに補完しました")
-        if '_inning_sync_error' in st.session_state:
-            _sync_err_msg = st.session_state.pop('_inning_sync_error')
-            st.error(f"⚠️ DB同期に失敗しました: {_sync_err_msg}")
         # 選手交代後のポジションチェック
         if st.session_state.pop('_just_did_substitution', False):
             _top_missing = _check_missing_positions(top_poses)
@@ -1465,25 +1453,11 @@ def main_page(list):
                                 
                                 updated_list = update_list(inputed_list, top_poses, top_names, top_nums, top_lrs, bottom_poses, bottom_names, bottom_nums, bottom_lrs, top_score, bottom_score)
 
-                                # ── イニング終了時DB同期チェック ──
                                 # 次プレイの回・表裏が変わった = このプレイでイニングが終了
                                 _inning_ended = (
                                     updated_list[10] != inputed_list[10]
                                     or updated_list[11] != inputed_list[11]
                                 )
-                                if _inning_ended and gid is not None:
-                                    try:
-                                        from db import game_repo as _igr
-                                        _mem_list = st.session_state.get('all_list', [])
-                                        _n_sync = _igr.sync_missing_plays(
-                                            gid,
-                                            _mem_list,
-                                            st.session_state.get('logged_in_team_id'),
-                                        )
-                                        if _n_sync:
-                                            st.session_state['_inning_sync_result'] = _n_sync
-                                    except Exception as _sync_err:
-                                        st.session_state['_inning_sync_error'] = str(_sync_err)
 
                                 # ── イニング終了時ポジションチェック ──
                                 if _inning_ended:
@@ -1606,6 +1580,34 @@ def main_page(list):
             st.success( f"✅ 試合開始: {_開始時刻}" )
         if st.button( '▶ 試合開始（開始時刻を記録）', use_container_width = True, key = 'btn_game_start_menu' ):
             st.session_state[ '開始時刻' ] = datetime.now().strftime( '%H:%M:%S' )
+            st.rerun()
+
+        st.divider()
+
+        # ── クラウドDB 手動同期 ──
+        st.markdown( "### クラウドDB（Supabase）" )
+        st.caption(
+            "メモリ上のプレイのうち、まだデータベースに無いものだけ送信します。"
+            "通信が不安定なときや、保存失敗のあとに押してください。"
+        )
+        _btn_sync_gid = st.session_state.get( 'current_game_id' )
+        _btn_sync_list = st.session_state.get( 'all_list' ) or []
+        if st.button(
+            'DBに同期（未送信プレイを送信）',
+            use_container_width = True,
+            key = 'btn_manual_db_sync',
+            disabled = _btn_sync_gid is None or len( _btn_sync_list ) == 0,
+        ):
+            try:
+                from db import game_repo as _mgr
+                _n_sync_btn = _mgr.sync_missing_plays(
+                    _btn_sync_gid,
+                    _btn_sync_list,
+                    st.session_state.get( 'logged_in_team_id' ),
+                )
+                st.session_state[ '_manual_sync_feedback' ] = { 'ok': True, 'n': _n_sync_btn }
+            except Exception as _sync_btn_e:
+                st.session_state[ '_manual_sync_feedback' ] = { 'ok': False, 'err': str( _sync_btn_e ) }
             st.rerun()
 
         st.divider()
@@ -1863,8 +1865,8 @@ def main_page(list):
             'last_confirmed_play_key', 'cached_all_list_len', 'already_rerun',
             'reset_flag', 'radio_selection', 'pickoff_selection',
             '_game_end_sync_done', '_game_end_sync_result',
-            '_inning_sync_result', '_inning_sync_error',
             '_db_insert_error', '_db_delete_error', '_pos_warning', '_just_did_substitution',
+            '_manual_sync_feedback',
         ]
 
         if not st.session_state.get( '_game_end_sync_done' ):
