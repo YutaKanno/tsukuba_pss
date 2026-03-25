@@ -1005,7 +1005,7 @@ def _generate_player_pdf(
     PAGE_SIZE = landscape( A4 )
     PAGE_W    = PAGE_SIZE[ 0 ]
     CONTENT_W = PAGE_W - 2 * MARGIN
-    N_COLS    = 5
+    N_COLS    = 3
     cell_w    = CONTENT_W / N_COLS
 
     PITCH_TYPE_GROUPS = [
@@ -1287,12 +1287,12 @@ def _calc_course_chart( df: pd.DataFrame ) -> io.BytesIO | None:
               axis_title=element_blank(), axis_line=element_blank(),
               panel_grid=element_blank(), panel_border=element_blank(),
               plot_background=element_blank(), panel_background=element_blank(),
-              legend_position='none', figure_size=( 10, 10 ),
+              legend_position='none', figure_size=( 5, 5 ),
           ) )
 
     mpl_fig = p.draw()
     buf = io.BytesIO()
-    mpl_fig.savefig( buf, format='png', dpi=300, bbox_inches='tight' )
+    mpl_fig.savefig( buf, format='png', dpi=150, bbox_inches='tight' )
     plt.close( mpl_fig )
     buf.seek( 0 )
     return buf
@@ -1451,92 +1451,91 @@ def show() -> None:
                             if raw_b:
                                 st.image( raw_b, use_container_width=True )
 
-                # 打者タブ + PDF出力タブ
-                all_tab_labels = selected_batters + [ 'PDF出力' ]
-                all_tabs       = st.tabs( all_tab_labels )
-                batter_tabs    = all_tabs[ :-1 ]
-                tab_pdf        = all_tabs[ -1 ]
-
                 # コメントを一括取得（N+1クエリ防止）
                 _cached_comments = batter_comment_repo.get_all_comments( team_id )
 
-                for tab_b, batter in zip( batter_tabs, selected_batters ):
-                    with tab_b:
-                        # ── コメント ────────────────────────────────
-                        _ck_edit = f'ba_comment_editing_{batter}'
-                        if _ck_edit not in st.session_state:
-                            st.session_state[ _ck_edit ] = False
-                        saved_comment = _cached_comments.get( batter, '' )
-                        if st.session_state[ _ck_edit ]:
-                            new_text = st.text_area(
-                                'コメント', value=saved_comment,
-                                height=150, key=f'ba_comment_input_{batter}',
-                            )
-                            c_save, c_cancel = st.columns( [ 1, 1 ] )
-                            with c_save:
-                                if st.button( '保存', key=f'ba_comment_save_{batter}' ):
-                                    batter_comment_repo.upsert_comment( team_id, batter, new_text )
-                                    st.session_state[ _ck_edit ] = False
-                                    _cached_comments[ batter ] = new_text
-                                    st.rerun()
-                            with c_cancel:
-                                if st.button( 'キャンセル', key=f'ba_comment_cancel_{batter}' ):
-                                    st.session_state[ _ck_edit ] = False
-                                    st.rerun()
-                        else:
-                            if saved_comment:
-                                st.text( saved_comment )
-                            else:
-                                st.info( 'コメントはまだ登録されていません。' )
-                            if st.button( 'Edit', key=f'ba_comment_edit_{batter}' ):
-                                st.session_state[ _ck_edit ] = True
+                _view_options = selected_batters + [ 'PDF出力' ]
+                _selected_view = st.radio(
+                    '表示', _view_options, horizontal=True, key='bam_player_view'
+                )
+
+                if _selected_view != 'PDF出力':
+                    batter = _selected_view
+                    # ── コメント ────────────────────────────────
+                    _ck_edit = f'ba_comment_editing_{batter}'
+                    if _ck_edit not in st.session_state:
+                        st.session_state[ _ck_edit ] = False
+                    saved_comment = _cached_comments.get( batter, '' )
+                    if st.session_state[ _ck_edit ]:
+                        new_text = st.text_area(
+                            'コメント', value=saved_comment,
+                            height=150, key=f'ba_comment_input_{batter}',
+                        )
+                        c_save, c_cancel = st.columns( [ 1, 1 ] )
+                        with c_save:
+                            if st.button( '保存', key=f'ba_comment_save_{batter}' ):
+                                batter_comment_repo.upsert_comment( team_id, batter, new_text )
+                                st.session_state[ _ck_edit ] = False
+                                _cached_comments[ batter ] = new_text
                                 st.rerun()
+                        with c_cancel:
+                            if st.button( 'キャンセル', key=f'ba_comment_cancel_{batter}' ):
+                                st.session_state[ _ck_edit ] = False
+                                st.rerun()
+                    else:
+                        if saved_comment:
+                            st.text( saved_comment )
+                        else:
+                            st.info( 'コメントはまだ登録されていません。' )
+                        if st.button( 'Edit', key=f'ba_comment_edit_{batter}' ):
+                            st.session_state[ _ck_edit ] = True
+                            st.rerun()
 
-                        # ── スタッツテーブル（キャッシュ・プリミティブキー）──
-                        st.image(
-                            _cached_stats_table(
-                                team_id, start_date, end_date, selected_team, batter, _STATS_COLS
-                            ),
-                            use_container_width=True,
-                        )
+                    # ── スタッツテーブル（キャッシュ・プリミティブキー）──
+                    st.image(
+                        _cached_stats_table(
+                            team_id, start_date, end_date, selected_team, batter, _STATS_COLS
+                        ),
+                        use_container_width=True,
+                    )
 
-                        # ── コース別打率（全/右/左）横3列 ──────────────
-                        col_all, col_r, col_l = st.columns( 3 )
-                        for col, label, side in [
-                            ( col_all, '全投手',   None ),
-                            ( col_r,   '対右投手', '右'  ),
-                            ( col_l,   '対左投手', '左'  ),
-                        ]:
-                            with col:
-                                st.caption( label )
-                                raw_c = _cached_course_chart(
-                                    team_id, start_date, end_date, selected_team, batter, side )
-                                if raw_c:
-                                    st.image( raw_c, use_container_width=True )
-                                else:
-                                    st.info( 'データ不足' )
+                    # ── コース別打率（全/右/左）横3列 ──────────────
+                    col_all, col_r, col_l = st.columns( 3 )
+                    for col, label, side in [
+                        ( col_all, '全投手',   None ),
+                        ( col_r,   '対右投手', '右'  ),
+                        ( col_l,   '対左投手', '左'  ),
+                    ]:
+                        with col:
+                            st.caption( label )
+                            raw_c = _cached_course_chart(
+                                team_id, start_date, end_date, selected_team, batter, side )
+                            if raw_c:
+                                st.image( raw_c, use_container_width=True )
+                            else:
+                                st.info( 'データ不足' )
 
-                        # ── 対右投手 球種タイプ別スタッツ + 散布図 ──────────
-                        st.markdown( '#### 対右投手' )
-                        st.image(
-                            _cached_pitchtype_stats(
-                                team_id, start_date, end_date, selected_team, batter, '右', _STATS_COLS
-                            ),
-                            use_container_width=True,
-                        )
-                        _render_scatter_by_side( batter, '右' )
+                    # ── 対右投手 球種タイプ別スタッツ + 散布図 ──────────
+                    st.markdown( '#### 対右投手' )
+                    st.image(
+                        _cached_pitchtype_stats(
+                            team_id, start_date, end_date, selected_team, batter, '右', _STATS_COLS
+                        ),
+                        use_container_width=True,
+                    )
+                    _render_scatter_by_side( batter, '右' )
 
-                        # ── 対左投手 球種タイプ別スタッツ + 散布図 ──────────
-                        st.markdown( '#### 対左投手' )
-                        st.image(
-                            _cached_pitchtype_stats(
-                                team_id, start_date, end_date, selected_team, batter, '左', _STATS_COLS
-                            ),
-                            use_container_width=True,
-                        )
-                        _render_scatter_by_side( batter, '左' )
+                    # ── 対左投手 球種タイプ別スタッツ + 散布図 ──────────
+                    st.markdown( '#### 対左投手' )
+                    st.image(
+                        _cached_pitchtype_stats(
+                            team_id, start_date, end_date, selected_team, batter, '左', _STATS_COLS
+                        ),
+                        use_container_width=True,
+                    )
+                    _render_scatter_by_side( batter, '左' )
 
-                with tab_pdf:
+                else:
                     st.markdown( '**PDF（選択選手全員）**' )
                     if st.button( 'PDF 生成', key='bam_player_gen_pdf' ):
                         _all_comments = batter_comment_repo.get_all_comments( team_id )
