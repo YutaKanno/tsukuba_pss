@@ -9,7 +9,7 @@ import streamlit as st
 
 import auth as _auth
 from db import game_repo, player_repo, schema, user_repo
-import extra_streamlit_components as _stx
+from streamlit_cookies_controller import CookieController as _CookieController
 
 
 def init_session() -> None:
@@ -109,7 +109,7 @@ def _set_auth_session(cookie_ctrl, team_id: int, team_name: str) -> None:
 def _logout(cookie_ctrl) -> None:
     """セッションを完全クリアし、Cookie 復元を防ぐフラグをセット。"""
     try:
-        cookie_ctrl.delete(_auth.COOKIE_NAME)
+        cookie_ctrl.remove(_auth.COOKIE_NAME)
     except Exception:
         pass
     # db_inited だけ残して全セッションをクリア
@@ -172,17 +172,15 @@ def _login_page(cookie_ctrl) -> None:
 
 # --- ページ設定・スタイル ---
 st.set_page_config( page_title = "Tsukuba PSS", page_icon = "assets/tsukuba_logo.png", layout = "wide" )
-st.markdown("""
-<style>
+st.html("""<style>
 #MainMenu, footer, header { visibility: hidden; }
 .block-container { padding-top: 0rem !important; padding-bottom: 0rem !important; }
-</style>
-""", unsafe_allow_html=True)
+</style>""")
 
 ensure_db()
 
 # ── 認証: Basic Auth (Nginx) → Cookie フォールバック ──
-_cookie_ctrl = _stx.CookieManager(key="tsukuba_pss_cm")
+_cookie_ctrl = _CookieController(key="tsukuba_pss_cm")
 
 if "logged_in_team_id" not in st.session_state:
     # 1) 本番: Nginx が付与した X-Remote-User ヘッダーを使用
@@ -199,7 +197,7 @@ if "logged_in_team_id" not in st.session_state:
     # 2) ローカル開発: Cookie フォールバック
     # _logged_out フラグがある場合は Cookie 復元をスキップ（ログアウト直後の再ログインを正しく動作させる）
     if "logged_in_team_id" not in st.session_state and not st.session_state.get("_logged_out"):
-        _all_cookies = _cookie_ctrl.get_all()
+        _all_cookies = _cookie_ctrl.getAll()
         if _all_cookies is None:
             st.stop()  # JS未実行 → コンポーネントが値を返したら自動 rerun
         _token = _all_cookies.get(_auth.COOKIE_NAME) if _all_cookies else None
@@ -756,8 +754,8 @@ elif st.session_state.page_ctg == "member":
                         st.session_state["all_list"] = _recovered
                 except Exception:
                     pass
-            # 復元できなかった場合だけスタートへ戻す
-            if not st.session_state["all_list"]:
+            # 復元できなかった場合: current_game_id も無ければスタートへ
+            if not st.session_state["all_list"] and st.session_state.get("current_game_id") is None:
                 st.session_state.page_ctg = "start"
                 st.session_state["pending_game_select"] = True
                 st.rerun()
