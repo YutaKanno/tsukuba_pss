@@ -269,6 +269,8 @@ if st.session_state.page_ctg == "start":
         if st.button( "試合開始", disabled = not has_teams, use_container_width = True, type = "primary" ):
             st.session_state.page_ctg = "member"
             st.session_state.game_start = "start"
+            st.session_state["current_game_id"] = None
+            st.session_state["all_list"] = []
             # 前試合のスタメンロード済みフラグをリセット（新試合でDBから再読み込みさせる）
             for _k in ["_stamem_loaded_top", "_stamem_loaded_bottom"]:
                 st.session_state.pop(_k, None)

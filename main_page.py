@@ -310,7 +310,23 @@ def main_page(list):
         st.session_state[cache_key] = pd.DataFrame(all_list, columns=column_names)
         st.session_state[cache_len_key] = n
     dataframe = st.session_state[cache_key]
-    
+
+    # シーズン成績・球種円グラフ用: 全試合データ（DB）＋現在セッションを結合
+    from plays_cache import get_cached_team_plays_df as _get_all_plays
+    _team_id_for_season = st.session_state.get('logged_in_team_id')
+    if _team_id_for_season:
+        _df_all_games = _get_all_plays(_team_id_for_season)
+        if not _df_all_games.empty and not dataframe.empty:
+            df_for_season = pd.concat(
+                [_df_all_games, dataframe], ignore_index=True
+            ).drop_duplicates(subset=['試合日時', 'プレイの番号'], keep='last')
+        elif not _df_all_games.empty:
+            df_for_season = _df_all_games
+        else:
+            df_for_season = dataframe
+    else:
+        df_for_season = dataframe
+
     if '開始時刻' not in st.session_state:
         st.session_state[ '開始時刻' ] = list[76]
     if '現在時刻' not in st.session_state:
@@ -417,7 +433,7 @@ def main_page(list):
             二走氏名 = bottom_names[二走打順-1]
         if 三走状況 not in ['0', 0]:
             三走氏名 = bottom_names[三走打順-1]
-    stats = cal_stats.cal_stats(df_current, 投手氏名, opponent_p, 打者氏名, next_batter, 試合日時)
+    stats = cal_stats.cal_stats(df_for_season, 投手氏名, opponent_p, 打者氏名, next_batter, 試合日時)
     球数 = stats[24]+1
 
     if "already_rerun" not in st.session_state:
@@ -467,7 +483,7 @@ def main_page(list):
                 col31, col32 = st.columns([1,5])
                 with col31:
                     # 球種の出現数を取得
-                    labels, values = cal_stats.pt_pct(投手氏名, df_current)
+                    labels, values = cal_stats.pt_pct(投手氏名, df_for_season)
 
                     # カラーパレットを定義
                     palette = {
@@ -1616,6 +1632,7 @@ def main_page(list):
             _do_delete = st.button( '↩ 1つ削除して戻る', use_container_width = True )
         if _do_player_sub:
             st.session_state.page_ctg = 'member'
+            st.rerun()
         if _do_delete:
             if st.session_state[ 'all_list' ]:
                 gid = st.session_state.get('current_game_id')
@@ -1709,6 +1726,8 @@ def main_page(list):
                 # 状態更新
                 st.session_state['data_list'] = updated_list
                 st.session_state.reset_flag = True
+                # 削除後の確定ブロックを防ぐためキーをクリア
+                st.session_state.pop('last_confirmed_play_key', None)
                 st.session_state.pop('_prev_batting_result', None)
                 st.session_state.pop('_prev_batting_result2', None)
                 st.session_state.pop('_prev_pickoff_detail', None)
