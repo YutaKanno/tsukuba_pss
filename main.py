@@ -744,9 +744,23 @@ elif st.session_state.page_ctg == "member":
 
     elif st.session_state.game_start == "continue":
         if not st.session_state["all_list"]:
-            st.session_state.page_ctg = "start"
-            st.session_state["pending_game_select"] = True
-            st.rerun()
+            # セッション切れ等で all_list が空の場合、current_game_id があれば DB から復元
+            _recover_gid = st.session_state.get("current_game_id")
+            if _recover_gid:
+                try:
+                    _recovered = game_repo.get_play_list(
+                        _recover_gid,
+                        owner_team_id=st.session_state.get("logged_in_team_id"),
+                    )
+                    if _recovered:
+                        st.session_state["all_list"] = _recovered
+                except Exception:
+                    pass
+            # 復元できなかった場合だけスタートへ戻す
+            if not st.session_state["all_list"]:
+                st.session_state.page_ctg = "start"
+                st.session_state["pending_game_select"] = True
+                st.rerun()
         if "temp_list" not in st.session_state:
             st.session_state.temp_list = st.session_state["all_list"][-1]
 
