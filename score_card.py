@@ -28,7 +28,7 @@ def _status_series_run_count( ser: pd.Series ) -> int:
     """状況列に含まれる「本進」の件数。列が数値型でも .str で落ちないよう文字列化する。"""
     if ser.empty:
         return 0
-    return int( ser.fillna( '' ).astype( str ).str.contains( '本進', na = False ).sum() )
+    return int( ser.fillna( '' ).infer_objects( copy=False ).astype( str ).str.contains( '本進', na = False ).sum() )
 
 
 # PDF セル文字色
@@ -499,7 +499,7 @@ def _draw_table_on_ax(
         '' if i in hidden_header_idxs else h
         for i, h in enumerate( col_headers )
     ]
-    all_text  = [ display_headers ] + df_disp.fillna( '' ).astype( str ).values.tolist()
+    all_text  = [ display_headers ] + df_disp.fillna( '' ).infer_objects( copy=False ).astype( str ).values.tolist()
     total_row = len( all_text )
 
     table = ax.table(
@@ -700,7 +700,7 @@ def show() -> None:
 
     # ── スコア ─────────────────────────────────────────────────────
     st.subheader( 'スコア' )
-    st.dataframe( _score_df( df, top_team, bot_team, innings ),
+    st.dataframe( _score_df( df, top_team, bot_team, innings ).astype( str ),
                   use_container_width = True )
 
     # ── スコアブック ───────────────────────────────────────────────

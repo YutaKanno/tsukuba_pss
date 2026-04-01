@@ -312,20 +312,27 @@ def main_page(list):
     dataframe = st.session_state[cache_key]
 
     # シーズン成績・球種円グラフ用: 全試合データ（DB）＋現在セッションを結合
-    from plays_cache import get_cached_team_plays_df as _get_all_plays
-    _team_id_for_season = st.session_state.get('logged_in_team_id')
-    if _team_id_for_season:
-        _df_all_games = _get_all_plays(_team_id_for_season)
-        if not _df_all_games.empty and not dataframe.empty:
-            df_for_season = pd.concat(
-                [_df_all_games, dataframe], ignore_index=True
-            ).drop_duplicates(subset=['試合日時', 'プレイの番号'], keep='last')
-        elif not _df_all_games.empty:
-            df_for_season = _df_all_games
+    # n が変わった時だけ再構築してセッションにキャッシュ
+    _season_df_key = 'cached_df_for_season'
+    _season_n_key  = 'cached_df_for_season_n'
+    if st.session_state.get(_season_n_key) != n:
+        from plays_cache import get_cached_team_plays_df as _get_all_plays
+        _team_id_for_season = st.session_state.get('logged_in_team_id')
+        if _team_id_for_season:
+            _df_all_games = _get_all_plays(_team_id_for_season)
+            if not _df_all_games.empty and not dataframe.empty:
+                _df_s = pd.concat(
+                    [_df_all_games, dataframe], ignore_index=True
+                ).drop_duplicates(subset=['試合日時', 'プレイの番号'], keep='last')
+            elif not _df_all_games.empty:
+                _df_s = _df_all_games
+            else:
+                _df_s = dataframe
         else:
-            df_for_season = dataframe
-    else:
-        df_for_season = dataframe
+            _df_s = dataframe
+        st.session_state[_season_df_key] = _df_s
+        st.session_state[_season_n_key]  = n
+    df_for_season = st.session_state.get(_season_df_key, dataframe)
 
     if '開始時刻' not in st.session_state:
         st.session_state[ '開始時刻' ] = list[76]
@@ -433,7 +440,17 @@ def main_page(list):
             二走氏名 = bottom_names[二走打順-1]
         if 三走状況 not in ['0', 0]:
             三走氏名 = bottom_names[三走打順-1]
-    stats = cal_stats.cal_stats(df_for_season, 投手氏名, opponent_p, 打者氏名, next_batter, 試合日時)
+    _stats_names = {str(投手氏名), str(opponent_p), str(打者氏名), str(next_batter)}
+    _df_for_stats_raw = df_for_season[
+        df_for_season['投手氏名'].isin(_stats_names) | df_for_season['打者氏名'].isin(_stats_names)
+    ].reset_index(drop=True) if not df_for_season.empty else df_for_season
+    _LIST_COLS = ['top_poses','top_names','top_nums','top_lrs',
+                  'bottom_poses','bottom_names','bottom_nums','bottom_lrs',
+                  'top_score','bottom_score']
+    _df_for_stats = _df_for_stats_raw.drop(
+        columns=[c for c in _LIST_COLS if c in _df_for_stats_raw.columns]
+    )
+    stats = cal_stats.cal_stats(_df_for_stats, 投手氏名, opponent_p, 打者氏名, next_batter, 試合日時, str(先攻チーム), str(後攻チーム))
     球数 = stats[24]+1
 
     if "already_rerun" not in st.session_state:
@@ -483,7 +500,11 @@ def main_page(list):
                 col31, col32 = st.columns([1,5])
                 with col31:
                     # 球種の出現数を取得
-                    labels, values = cal_stats.pt_pct(投手氏名, df_for_season)
+                    _df_for_ptpct_raw = df_for_season[df_for_season['投手氏名'] == 投手氏名].reset_index(drop=True) if not df_for_season.empty else df_for_season
+                    _df_for_ptpct = _df_for_ptpct_raw.drop(
+                        columns=[c for c in _LIST_COLS if c in _df_for_ptpct_raw.columns]
+                    )
+                    labels, values = cal_stats.pt_pct(投手氏名, _df_for_ptpct)
 
                     # カラーパレットを定義
                     palette = {
