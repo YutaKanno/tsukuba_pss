@@ -15,6 +15,8 @@ def cal_stats(
     打者氏名: str,
     次打者氏名: str,
     試合日時: str,
+    先攻チーム: str = '',
+    後攻チーム: str = '',
 ) -> dict:
     """Return dict of today/season stats for the given pitcher and batters."""
     def safe_div( numerator: Union[int, float], denominator: Union[int, float], scale: int = 1000 ) -> Any:
@@ -26,8 +28,18 @@ def cal_stats(
     def safe_round_div( numerator: Union[int, float], denominator: Union[int, float], decimals: int = 1 ) -> Any:
         return round( numerator / denominator, decimals ) if denominator != 0 else '--'
 
+    # 今日フィルター（試合日時 + 先攻・後攻チームで一意に特定）
+    if 先攻チーム and 後攻チーム:
+        today_mask = (
+            (df['試合日時'].astype(str) == str(試合日時)) &
+            (df['先攻チーム'] == 先攻チーム) &
+            (df['後攻チーム'] == 後攻チーム)
+        )
+    else:
+        today_mask = (df['試合日時'].astype(str) == str(試合日時))
+
     # 今日の投手成績
-    dfff = df[(df['投手氏名'] == 投手氏名) & (df['試合日時'] == 試合日時)]
+    dfff = df[(df['投手氏名'] == 投手氏名) & today_mask]
     dff = df[df['投手氏名'] == 投手氏名]
 
     out_counts_today = (
@@ -100,7 +112,7 @@ def cal_stats(
     FIP = round(FIP + FIP_scale, 2) if FIP != '--' else '--'
 
     # 打者 today / season (打者氏名)
-    dfff2 = df[(df['打者氏名'] == 打者氏名) & (df['試合日時'] == 試合日時)]
+    dfff2 = df[(df['打者氏名'] == 打者氏名) & today_mask]
     dff2 = df[df['打者氏名'] == 打者氏名]
 
     today2 = ", ".join(dfff2[~dfff2['打席結果'].isin(['0', 0])]['打席結果'].astype(str).tolist())
@@ -134,7 +146,7 @@ def cal_stats(
     hr2 = len(dff2[dff2['打撃結果'] == '本塁打'])
 
     # 次打者
-    dfff3 = df[(df['打者氏名'] == 次打者氏名) & (df['試合日時'] == 試合日時)]
+    dfff3 = df[(df['打者氏名'] == 次打者氏名) & today_mask]
     dff3 = df[df['打者氏名'] == 次打者氏名]
 
     today3 = ", ".join(dfff3[~dfff3['打席結果'].isin(['0', 0])]['打席結果'].astype(str).tolist())
@@ -167,8 +179,8 @@ def cal_stats(
 
     hr3 = len(dff3[dff3['打撃結果'] == '本塁打'])
     
-    op_np = len(df[(df['投手氏名'] == 相手投手) & (df['プレイの種類'] == '投球') & (df['試合日時'] == 試合日時)])
-    np = len(df[(df['投手氏名'] == 投手氏名) & (df['プレイの種類'] == '投球') & (df['試合日時'] == 試合日時)])
+    op_np = len(df[(df['投手氏名'] == 相手投手) & (df['プレイの種類'] == '投球') & today_mask])
+    np = len(df[(df['投手氏名'] == 投手氏名) & (df['プレイの種類'] == '投球') & today_mask])
 
     return [
         投球回, Max, Mean, H, K, B, R,
